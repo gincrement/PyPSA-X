@@ -2759,4 +2759,3 @@ def main(
 
 if __name__ == '__main__':
     n, list_results, list_supplies, list_balances, list_curtailments, df = main()
-
