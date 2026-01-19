@@ -1,0 +1,8 @@
+# Ignore All (xlsx) files
+*.xlsx
+*.xlsm
+*.xls
+
+# ignore directories
+.idea
+run_*
