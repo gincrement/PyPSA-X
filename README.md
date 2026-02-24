@@ -51,24 +51,23 @@ different investment costs, different technology options);
 optimization for a more accurate opertional behaviour.
 
 ## Installation
-The procedure to setup **PyPSA-X** is basically the same as installing <ins>PyPSA</ins>:
 
-via pip:
+### Clone the Repository
+First of all, clone the **PyPSA-X** repository using the version control system **git** in the
+command line or download the ZIP file from the GiHub server manually.
 
 ``` bash
-pip install pypsa
+git clone https://github.com/gincrement/PyPSA-X
 ```
 
-via conda/mamba:
+### Install Python Dependencies
+**PyPSA-X** relies on a set of other Python packages to function. We manage these using **pixi**.
+Once [pixi](https://pixi.prefix.dev/latest/installation/) is installed, you can activate the 
+project environment for your operating system and have access to all the **PyPSA-X** dependencies
+from the command line:
 
 ``` bash
-conda install -c conda-forge pypsa
-```
-
-vi uv:
-
-``` bash
-uv add pypsa
+pixi shell
 ```
 
 ## Usage
