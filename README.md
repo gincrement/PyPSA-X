@@ -99,7 +99,7 @@ or commercial solvers like
 ## Contributing and Support
 We strongly welcome anyone interested in contributing to this project. If you have any ideas, suggestions 
 or encounter problems, feel invited to file [issues](https://github.com/gincrement/PyPSA-X/issues) or 
-make [pull requests}(https://github.com/gincrement/PyPSA-X/pulls) on GitHub.
+make [pull requests](https://github.com/gincrement/PyPSA-X/pulls) on GitHub.
 
 ## Licence
 Copyright [PyPSA-X Contributors]
