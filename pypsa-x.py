@@ -13,26 +13,24 @@ MIT License
 Copyright (c) <year> <copyright holders>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-associated documentation files (the "Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
-following conditions:
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute, 
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is 
+furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial
-portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or 
+substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
-LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
-EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT 
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
 
 
-default_xls_filename = 'PyPSA_PtX_AB_v1.0.0.xlsx'
-default_xls_filename = 'PyPSA_PtX_AB_test.xlsx'
-
+default_xls_filename = 'PyPSA_PtX_AB_v1.0.0.xls'
 
 # -----------------------------------------------------------------------------
 # No need to change code below this line ...
@@ -65,8 +63,8 @@ if (len(sys.argv) > 1) and \
         xls_filename = sys.argv[1]
     #
     else:
-        print (f'error! provided XLS file does not exist: {sys.argv[1]}\n')
-        print (f'fallback to default XLS file: {default_xls_filename}\n')
+        print (f'error! provided XLSX file does not exist: {sys.argv[1]}\n')
+        print (f'fallback to default XLSX file: {default_xls_filename}\n')
         xls_filename = default_xls_filename
 #
 else:
@@ -93,7 +91,7 @@ try:
         sys.exit (-1)
     #
     import linopy
-    from linopy.remote.oetc import OetcCredentials, OetcHandler, OetcSettings
+    from linopy.remote.oetc import ComputeProvider, OetcCredentials, OetcHandler, OetcSettings
     import pandas as pd
     pd.options.display.float_format = '{:,.2f}'.format
     pd.options.display.max_rows = 100
@@ -150,8 +148,6 @@ if deactivate_network_viewers:
     network_viewer = False
     networkx_viewer = False
 
-kwargs = {}
-
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
 #
@@ -188,6 +184,18 @@ def getsize(obj):
         objects = get_referents(*need_referents)
     #
     return size
+
+#
+# source:
+# https://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits/23728630#23728630
+#
+def random_string(string_length=10):
+    """Returns a random string of length string_length."""
+    import uuid
+    random = str(uuid.uuid4()) # Convert UUID format to a Python string.
+    random = random.upper() # Make all characters uppercase.
+    random = random.replace("-","") # Remove the UUID '-'.
+    return random[0:string_length] # Return the random string.
 
 
 def read_excel_data(
@@ -439,13 +447,19 @@ def read_all_params(
         'run_scenarios': 'False',
         'modular_representation': 'False',
         'transmission_losses': '0',
+        'remove_kvl_constraints': 'False',
+        'do_maintenance_planing': 'False',
+        'maintenance_mode': 'monthly',
         'do_operational_constraints': 'True',
         'do_investment_constraints': 'True',
         'do_milp_constraints': 'True',
         'do_strict_unsimultaneous_dis+charging': 'False',
-        'assign_all_duals': 'False',
+        'assign_all_duals': 'True',
         'small_limit': 0.00001,
+        'discount_factor': 0.06,
+        'years_of_construction': 4,
         'project_cod': datetime.now().year,
+        'years_of_operation': 25,
         'link_ports': 2,
         'total_snapshot': 8760,
         'do_segmentation': 'False',
@@ -454,8 +468,8 @@ def read_all_params(
         'mipgap': 0.001,
         'timelimit_in_hours': 1,
         'timelimit': 3600,
-        'log_to_console': 1,
-        'output_flag': 1,
+        'log_to_console': 0,
+        'output_flag': 0,
         # stochastic optimization settings
         'run_stochastic_runs': 'False',
         'stoch_alpha': 0.9,
@@ -476,6 +490,7 @@ def read_all_params(
         'investment_weighting': '[1]', # weighting of periods; e.g, gap between 
                                        # multiple years; e.g., 5 or 10
         'primary_optimization': 'pathway',
+        'objective_function': 'annuity+o&m', # 'annuity-o&m', 'npv'
         # some reserve margin settings
         'rm_activate': 'False',
         'rm_factor_a': 1,
@@ -613,6 +628,7 @@ def get_solver_setting (
              'solver': 'choose', # "simplex", "choose", "ipm" or "pdlp".
                                  # If "simplex"/"ipm"/"pdlp"; default: "choose"
              'run_crossover': 'choose', # "off", "choose" or "on"; default: "on"
+             'user_objective_scale': -4,
              }
     #
     elif globals()['solver_name'] == 'cplex':
@@ -690,7 +706,7 @@ def validate_scenario_adjustments(
     return all_adjustments_ok
 
 def update_network(
-        n: pypsa.Network(),
+        n: pypsa.Network,
         df_adjusts: pd.core.frame.DataFrame, 
         scenario: str,
         stoch_scenarios: str = None,
@@ -944,7 +960,7 @@ def save_network_svg(
         n: pypsa.Network,
         file_name: str,
         small_limit: float = 0.0001
-    ) -> nx.Graph():
+    ) -> nx.Graph:
     """
     Save a given PyPSA network as SVG file.
     
@@ -956,7 +972,7 @@ def save_network_svg(
     file_name: str
         File name to save the PyPSA network into.
 
-    small_limit: float = 0.0001
+    small_limit: float
         Minimum size of technology to be shown on the SVG file.
 
     Returns
@@ -1261,7 +1277,7 @@ def create_summaries(
         list_balances: list,
         list_curtailments: list,
         create_html: bool = False,
-    ) -> [list, list, list]:
+    ) -> list:
     """
     Shows the result in a standardized way and keeps the result in a 
     dictiionary.
@@ -1509,6 +1525,7 @@ def show_case_comparison(
 def do_optimization(
         n: pypsa.Network,
         inv_periods: np.ndarray,
+        kwargs: dict,
     ) -> tuple [pypsa.Network, 
                 str, 
                 str]:
@@ -1522,6 +1539,9 @@ def do_optimization(
 
     inv_periods: list
         List of years to assess.
+
+    kwargs: dict
+        List of keyword arguments
 
     Returns
     -------
@@ -1542,16 +1562,81 @@ def do_optimization(
         print ('\ndo full horizon / pathway optimization')
         #
         # start optimizing the network
-        status, tc = n.optimize(
-            snapshots = n.snapshots,
-        	solver_name = globals()['solver_name'], 
-            multi_investment_periods = False,
-        	extra_functionality = extra_functionalities,
-            # number of tangents used for the piecewise linear approximation
-            transmission_losses = int(globals()['transmission_losses']),
-            assign_all_duals = bool(globals()['assign_all_duals']),
-            # kwargs includes e.g., solver_options
-            **kwargs)
+        if globals()['objective_function'] == 'annuity+o&m':
+            print ('use standard min(annuity+O&M) target function')
+            status, tc = n.optimize(
+                snapshots = n.snapshots,
+            	solver_name = globals()['solver_name'], 
+                multi_investment_periods = False,
+            	extra_functionality = extra_functionalities,
+                transmission_losses = int(globals()['transmission_losses']),
+                assign_all_duals = bool(globals()['assign_all_duals']),
+                include_objective_constant=True,
+                # kwargs includes e.g., solver_options
+                **kwargs)
+        #
+        elif globals()['objective_function'] == 'npv':
+            print ('use adjusted max(NPV) target function')
+            n.optimize.create_model(
+                include_objective_constant=True
+            )
+            m = n.model
+            discount_rate = globals()['discount_factor']
+            investment_years = globals()['years_of_construction']
+            operation_years = globals()['years_of_operation']
+            df_capex = sum(1 / (1 + discount_rate) ** y for y in range(1, investment_years+1))
+            df_opex = sum(1 / (1 + discount_rate) ** (investment_years + y) for y in range(1, operation_years+1))
+            #
+            capex = 0
+            comps = pypsa.descriptors.nominal_attrs
+            for c in comps:
+                df = n.c[c].static
+                #
+                if f'{comps[c]}_extendable' in df.columns:
+                    mask = df[f'{comps[c]}_extendable']
+                    var_name = f'{c}-{comps[c]}'
+                    #
+                    if mask.any():
+                        var = m.variables[var_name].loc[mask.index[mask]]
+                        capital_cost = df.loc[mask, 'capital_cost']
+                        capex += (var * capital_cost).sum()
+            #
+            # is it assumed to invest capex in constant shares over the investment period
+            capex /= investment_years
+            #
+            opex = 0
+            weights = n.snapshot_weightings['objective']
+            col = '_bg_marginal_cost'
+            for c in n.branch_components | n.one_port_components:
+                if 'marginal_cost' in n.c[c]['attrs']:
+                    if c in m.variables:
+                        var = m.variables[f'{c}-p']
+                        mc = n.df(c)['marginal_cost']
+                        bg = 0
+                        #
+                        if col in df.cols:
+                            bg = n.df(c)['_background_cost']
+                        #
+                        opex += ( (var * (mc+bg)) * weights).sum()
+            #
+            m.objective = -(opex * df_opex + capex * df_capex)
+            m.objective.sense = "max"
+            status = 'nok'
+            tc = 'normal'
+            #
+            status, tc = n.optimize.solve_model(
+            	solver_name = globals()['solver_name'], 
+                multi_investment_periods = False,
+                extra_functionality = extra_functionalities,
+                transmission_losses = int(globals()['transmission_losses']),
+                assign_all_duals = bool(globals()['assign_all_duals']),
+                # kwargs includes e.g., solver_options
+                **kwargs)
+        #
+        else:
+            print (f'\nerror! Provided objective function method not allowed: {globals()['objective_function']}')
+            sys.exit (0)
+            
     #
     elif globals()['primary_optimization'] == 'myopic':
         print ('\ndo year by year / myopic optimization')
@@ -1564,9 +1649,9 @@ def do_optimization(
                 multi_investment_periods = True,
                 solver_name = globals()['solver_name'],
                 extra_functionality = extra_functionalities,
-                # number of tangents used for the piecewise linear approximation
                 transmission_losses = int(globals()['transmission_losses']),
                 assign_all_duals = bool(globals()['assign_all_duals']),
+                include_objective_constant=True,
                 # kwargs includes e.g., solver_options
                 **kwargs)
             #
@@ -1590,7 +1675,7 @@ def do_all_runs(
         n: pypsa.Network, 
         df_scens: pd.core.frame.DataFrame,
         df_stochs: pd.core.frame.DataFrame,
-        kwargs
+        kwargs: dict
     ) -> tuple [pypsa.Network, 
                 list, 
                 list, 
@@ -1655,7 +1740,8 @@ def do_all_runs(
         # do the investment optimization
         n, status, tc = do_optimization(
             n, 
-            inv_periods)
+            inv_periods,
+            kwargs)
         #
         # if optimization was successful, save the result and keep the 
         # results so they can be shown at the end of all runs
@@ -1703,7 +1789,6 @@ def do_all_runs(
                     overlap = overlap,
                 	solver_name = globals()['solver_name'], 
                 	extra_functionality = extra_functionalities,
-                    # number of tangents used for the piecewise linear approximation
                     transmission_losses = int(globals()['transmission_losses']),
                     assign_all_duals = bool(globals()['assign_all_duals']),
                     # kwargs includes e.g., solver_options
@@ -1845,11 +1930,11 @@ def link_capacities(
                         link2_cap = m.variables[f'{class2}-{nom_col2}'].loc[tech2]
                         #
                         # add the constraints
-                        if constr_name not in n.model.constraints:
+                        if constr_name not in m.constraints:
                             con = link1_cap - factor1 * link2_cap == factor2
                             con.sign = sign
                             m.add_constraints(con, name=constr_name)
-                            print (f'added {constr_name}')
+                            print (f'added constraint {constr_name}')
                     #
                     else:
                         print (f'info! constraint "{constr_name}" is misconfigured')
@@ -1919,7 +2004,7 @@ def link_operation(
                         con = link1_flow - factor1 * link2_flow == factor2
                         con.sign = sign
                         m.add_constraints(con, name=constr_name)
-                        print (f'added {constr_name}')
+                        print (f'added constraint {constr_name}')
                     #
                     else:
                         print (f'info! constraint "{constr_name}" is misconfigured')
@@ -2016,7 +2101,7 @@ def limit_hourly_operation_by_capacity(
             con = rhs <= link_cap
             con.sign = row.limit_op_sign
             m.add_constraints(con, name=constr_name)
-            print (f'added {constr_name}')
+            print (f'added constraint {constr_name}')
         #
         else:
             print (f'info! constraint "{constr_name}" is misconfigured')
@@ -2081,14 +2166,14 @@ def minimum_load_if_operates(
                     m.add_constraints(
                         dispatch >= min_pu * capacity - bigM * (1 - status),
                         name=constr_name)
-                    print (f'added {constr_name}')
+                    print (f'added constraint {constr_name}')
                 #
                 constr_name = f'{c}-{t}-is_online_if_in_operation'
                 if constr_name not in m.constraints:
                     m.add_constraints(
                         dispatch <= bigM * status,
                         name=constr_name)
-                    print (f'added {constr_name}')
+                    print (f'added constraint {constr_name}')
                 #
                 # adjust the objective function
                 m.objective -= 1.0 * status.sum()
@@ -2156,7 +2241,7 @@ def invest_if_installed(
                     m.add_constraints(
                         link_cap <= bigM * is_installed,
                         name=constr_name)
-                    print (f'added {constr_name}')
+                    print (f'added constraint {constr_name}')
                 #
                 # adjust the objective function
                 m.objective += invest * is_installed.sum()
@@ -2219,14 +2304,14 @@ def min_capacity_if_installed(
                     m.add_constraints(
                         link_cap >= min_cap * is_installed,
                         name=constr_name)
-                    print (f'added {constr_name}')
+                    print (f'added constraint {constr_name}')
                 #
                 constr_name = f'{c}-is_not_installed-{t}'
                 if constr_name not in m.constraints:
                     m.add_constraints(
                         link_cap <= bigM * is_installed,
                         name=constr_name)
-                    print (f'added {constr_name}')
+                    print (f'added constraint {constr_name}')
     #
     return None
 
@@ -2277,7 +2362,7 @@ def background_marginal_cost(
                     # adjust the objective function
                     m.objective += tech_flow.sum() * df[col][t]
                 #
-                print (f'added {c}.{t}.{col}')
+                print (f'added constraint {c}.{t}.{col}')
     #
     return None
 
@@ -2342,7 +2427,7 @@ def shared_technology_potential(
             m.add_constraints(
                 con <= 1,
                 name=constr_name)
-            print (f'added {constr_name}')
+            print (f'added constraint {constr_name}')
         else:
             print (f'info! nothing to do: {con}, {t}')
     #
@@ -2401,7 +2486,7 @@ def force_technology_capacity(
                     #
                     # add the constraints
                     m.add_constraints(con2, name=constr_name)
-                    print (f'added {constr_name}')
+                    print (f'added constraint {constr_name}')
     #
     return None
 
@@ -2444,7 +2529,7 @@ def mga_settings(
     m.add_constraints(
         objective + fixed_cost >= (1 + slack) * optimal_cost,
         name=constr_name)
-    print (f'added {constr_name}')
+    print (f'added constraint {constr_name}')
     #
     return None
 
@@ -2546,12 +2631,12 @@ def strict_unsimultaneous_charging_discharging(
             m.add_constraints(
                 charge_p <= bigM * bin_var, 
                 name = constr_name)
-            print (f'added {constr_name}')
+            print (f'added constraint {constr_name}')
             constr_name = f'{str_idx}-strict-on-discharge'
             m.add_constraints(
                 discharge_p <= bigM * (one - bin_var), 
                 name = constr_name)
-            print (f'added {constr_name}')
+            print (f'added constraint {constr_name}')
     #
     return None
 
@@ -2572,9 +2657,79 @@ def remove_KVL_constraints(
     None
     """
     #
-    constr = 'Kirchhoff-Voltage-Law'
-    if constr in n.model.constraints:
-        n.model.remove_constraints(constr)
+    m = n.model
+    constr_name = 'Kirchhoff-Voltage-Law'
+    if constr_name in m.constraints:
+        m.remove_constraints(constr_name)
+        print (f'removed {constr_name}')
+    #
+    return None
+
+def add_maintenance_constraints(
+        n: pypsa.Network, 
+        method: str = "monthly",
+    ) -> None:
+    """
+    Optimize maintenance start.
+    The following column in the individual DataFrames needs to be defined:
+        _opt_maint
+        _maint_duration
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    sns = n.snapshots
+    comps = pypsa.descriptors.nominal_attrs
+    col = '_opt_maint'
+    #
+    for c in comps:
+        if col in n.c[c].static.columns:
+            attr = comps[c]
+            techs = n.c[c].static.index
+            #
+            if method == "daily":
+                # allow one start per day (midnight)
+                start_times = sns[sns.hour == 0]
+            elif method == "weekly":
+                # allow one start per week (Monday 00:00)
+                start_times = sns[(sns.weekday == 0) & (sns.hour == 0)]
+            elif method == "monthly":
+                # allow one start per month (Day 1, 00:00)
+                start_times = sns[(sns.day == 1) & (sns.hour == 0)]
+            elif method == "hourly":
+                # otherwise allow start every hour
+                start_times = sns
+            #
+            # Binary maintenance start variable
+            m.add_variables(
+                binary=True,
+                coords=[start_times, techs],
+                name=f'{c}-maintenance_start')
+            #
+            z = m[f'{c}-maintenance_start']
+            constr_name = f'{c}-one_maintenance_per_option'
+            m.add_constraints(
+                z.sum(dim="snapshot") == 1, name=constr_name)
+            #
+            for t in techs:
+                for t_start in start_times:
+                    idx_start = sns.get_loc(t_start)
+                    affected = sns[idx_start: idx_start + n.c[c].static.at[t, '_maint_duration']]
+                    #
+                    if len(affected) > 0:
+                        constr_name = f'{c}-{t}-maintenance_off_{str(t_start).replace("-","")[0:8]}'
+                        m.add_constraints(
+                            n.model[f'{c}-{attr[0]}'].loc[affected, t]
+                                <= n.c[c].static.at[t, attr] * (1 - z.loc[t_start, t]),
+                            name=constr_name)
     #
     return None
 
@@ -2602,6 +2757,9 @@ def extra_functionalities(
     # LP functionalities
     print ('add LP constraints if/as needed ...')
     #
+    if eval(globals()['remove_kvl_constraints']):
+        remove_KVL_constraints(n)
+    #
     background_marginal_cost(n)
     #
     if eval(globals()['do_operational_constraints']):
@@ -2626,10 +2784,71 @@ def extra_functionalities(
         if eval(globals()['do_investment_constraints']):
             invest_if_installed(n)
             min_capacity_if_installed(n)
-    #
-    remove_KVL_constraints(n)
+        #
+        if eval(globals()['do_maintenance_planing']):
+            add_maintenance_constraints(n, globals()['maintenance_mode'])
     #
     return None
+
+
+def check_oetc_usage(
+    ) -> tuple:
+    """
+    Check if OETC should be used.
+
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    kwargs: tuple
+        Additional solver parameters.
+    """
+    #
+    if eval(globals()['use_oetc']):
+        try:
+            print ('initiating OETC ...')
+            globals()['solver_name'] = 'gurobi'
+            # set OETC settings
+            rndStr = random_string(6)
+            oetc = {}
+            oetc['name'] = f'PyPSA-X-{rndStr}'
+            oetc['authentication_server_url'] = 'https://auth.oetcloud.com'
+            oetc['orchestrator_server_url'] = 'https://orchestrator.oetcloud.com'
+            oetc['compute_provider'] = ComputeProvider.GCP,
+            oetc['cpu_cores'] = 4 # adjust as needed; RAM = #CPUs * 8 [GB]
+            oetc['disk_space_gb'] = 20 # adjust as needed [GB]
+            oetc['delete_worker_on_error'] = False
+            oetc['credentials'] = OetcCredentials(
+                email=os.environ['OETC_EMAIL'], password=os.environ['OETC_PASSWORD'])
+            oetc['solver'] = globals()['solver_name']
+            oetc['solver_options'] = get_solver_setting()
+            oetc_settings = OetcSettings(**oetc)
+            oetc_handler = OetcHandler(oetc_settings)
+            kwargs['remote'] = oetc_handler
+        #
+        except Exception as e: 
+            print (f'info! not able to initiate OETC\n{e}')
+            globals()['solver_name'] = 'highs'
+            globals()['use_oetc'] = 'False'
+    #
+    else:
+        globals()['solver_name'] = 'highs'
+    #
+    if 'kwargs' not in globals():
+        kwargs = {}
+    kwargs['solver_options'] = get_solver_setting()
+    print (f'OETC usage: {globals()['use_oetc']}')
+    #
+    if eval(globals()['use_oetc']):
+        print (f'OET solver to use: {globals()['solver_name']}\n')
+    #
+    else:
+        print (f'Local solver to use: {globals()['solver_name']}\n')
+    #
+    return kwargs
+
 
 def main(
     ) -> None:
@@ -2647,46 +2866,9 @@ def main(
     #
     # read the optimization settings and scenario definitions
     opt_params, df_scens, df_stochs = read_all_params(xls_filename)
-    #
-    if eval(globals()['use_oetc']):
-        try:
-            print ('initiating OETC ...')
-            globals()['solver_name'] = 'gurobi'
-            # oetc = solving.get('oetc', None)
-            oetc = {}
-            oetc['name'] = 'PyPSA-ptx_test' # without a GUI not that relevant 
-                                            # at the moment
-            oetc['authentication_server_url'] = 'http://34.34.8.15:5050'
-            oetc['orchestrator_server_url'] = 'http://34.34.8.15:5000'
-            oetc['cpu_cores'] = 4 # adjust to your needs, keep in mind that RAM 
-                                  # allocation is this value times 8
-            oetc['disk_space_gb'] = 20 # adjust to your needs
-            oetc['delete_worker_on_error'] = False # makes debugging easier if 
-                                                   # an error occurs during solving
-            oetc['credentials'] = OetcCredentials(
-                email=os.environ['OETC_EMAIL'], password=os.environ['OETC_PASSWORD'])
-            oetc['solver'] = globals()['solver_name']
-            oetc['solver_options'] = get_solver_setting()
-            oetc_settings = OetcSettings(**oetc)
-            oetc_handler = OetcHandler(oetc_settings)
-            kwargs['remote'] = oetc_handler
-        #
-        except Exception as e: 
-            print (f'info! not able to initiate OETC\n{e}')
-            globals()['solver_name'] = 'highs'
-            globals()['use_oetc'] = 'False'
-    #
-    else:
-        globals()['solver_name'] = 'highs'
-    #
-    kwargs['solver_options'] = get_solver_setting()
-    print (f'OETC usage: {globals()['use_oetc']}')
-    #
-    if eval(globals()['use_oetc']):
-        print (f'OET solver to use: {globals()['solver_name']}\n')
-    #
-    else:
-        print (f'Local solver to use: {globals()['solver_name']}\n')
+    # check the OETC usage and settings
+    kwargs = check_oetc_usage()
+    # set solver options
     #
     # get the PyPSA list of possible components
     sheets_list, sheets_ts_list = get_pypsa_component_lists()

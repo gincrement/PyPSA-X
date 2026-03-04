@@ -8,7 +8,11 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-pypsa = ">=1.0.7,<2"
+pypsa = ">=1.1.2,<2"
 tsam = ">=3.1.0,<4"
 grpcio = "1.73.1.*"
 openpyxl = ">=3.1.5,<4"
+pandas = "2.3.3.*"
+highspy = ">=1.12.0,<2"
+linopy = ">=0.6.5,<0.7"
+xlrd = ">=2.0.2,<3"

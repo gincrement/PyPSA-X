@@ -1,8 +1,10 @@
 # Ignore All (xlsx) files
 *.xlsx
 *.xlsm
-*.xls
 
 # ignore directories
 .idea
 run_*
+# pixi environments
+.pixi/*
+!.pixi/config.toml
