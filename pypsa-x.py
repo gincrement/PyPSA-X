@@ -30,8 +30,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 """
 
 
-default_xls_filename = 'PyPSA_PtX_AB_v1.0.0.xlsx'
-default_xls_filename = 'PyPSA_PtX_AB_test.xlsx'
+default_xls_filename = 'PyPSA_PtX_AB_v1.0.0.xls'
 
 # -----------------------------------------------------------------------------
 # No need to change code below this line ...
@@ -148,8 +147,6 @@ except:
 if deactivate_network_viewers:
     network_viewer = False
     networkx_viewer = False
-
-kwargs = {}
 
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
@@ -451,6 +448,8 @@ def read_all_params(
         'modular_representation': 'False',
         'transmission_losses': '0',
         'remove_kvl_constraints': 'False',
+        'do_maintenance_planing': 'False',
+        'maintenance_mode': 'monthly',
         'do_operational_constraints': 'True',
         'do_investment_constraints': 'True',
         'do_milp_constraints': 'True',
@@ -961,7 +960,7 @@ def save_network_svg(
         n: pypsa.Network,
         file_name: str,
         small_limit: float = 0.0001
-    ) -> nx.Graph():
+    ) -> nx.Graph:
     """
     Save a given PyPSA network as SVG file.
     
@@ -973,7 +972,7 @@ def save_network_svg(
     file_name: str
         File name to save the PyPSA network into.
 
-    small_limit: float = 0.0001
+    small_limit: float
         Minimum size of technology to be shown on the SVG file.
 
     Returns
@@ -1278,7 +1277,7 @@ def create_summaries(
         list_balances: list,
         list_curtailments: list,
         create_html: bool = False,
-    ) -> [list, list, list]:
+    ) -> list:
     """
     Shows the result in a standardized way and keeps the result in a 
     dictiionary.
@@ -1526,6 +1525,7 @@ def show_case_comparison(
 def do_optimization(
         n: pypsa.Network,
         inv_periods: np.ndarray,
+        kwargs: dict,
     ) -> tuple [pypsa.Network, 
                 str, 
                 str]:
@@ -1539,6 +1539,9 @@ def do_optimization(
 
     inv_periods: list
         List of years to assess.
+
+    kwargs: dict
+        List of keyword arguments
 
     Returns
     -------
@@ -1558,13 +1561,6 @@ def do_optimization(
     if globals()['primary_optimization'] == 'pathway':
         print ('\ndo full horizon / pathway optimization')
         #
-        # TODO debugging
-        # globals()['objective_function'] = 'npv'
-        n.remove("Load", "LOAD_INERTIA_01")
-        n.remove("Generator", "EMERGENCY_INERTIA_01")
-        n.remove("Generator", "INERTIA_POS_01")
-        # TODO debugging
-        #
         # start optimizing the network
         if globals()['objective_function'] == 'annuity+o&m':
             print ('use standard min(annuity+O&M) target function')
@@ -1573,15 +1569,17 @@ def do_optimization(
             	solver_name = globals()['solver_name'], 
                 multi_investment_periods = False,
             	extra_functionality = extra_functionalities,
-                # number of tangents used for the piecewise linear approximation
                 transmission_losses = int(globals()['transmission_losses']),
                 assign_all_duals = bool(globals()['assign_all_duals']),
+                include_objective_constant=True,
                 # kwargs includes e.g., solver_options
                 **kwargs)
         #
         elif globals()['objective_function'] == 'npv':
             print ('use adjusted max(NPV) target function')
-            n.optimize.create_model()
+            n.optimize.create_model(
+                include_objective_constant=True
+            )
             m = n.model
             discount_rate = globals()['discount_factor']
             investment_years = globals()['years_of_construction']
@@ -1621,7 +1619,7 @@ def do_optimization(
                         #
                         opex += ( (var * (mc+bg)) * weights).sum()
             #
-            m.objective = -opex * df_opex - capex * df_capex
+            m.objective = -(opex * df_opex + capex * df_capex)
             m.objective.sense = "max"
             status = 'nok'
             tc = 'normal'
@@ -1630,7 +1628,6 @@ def do_optimization(
             	solver_name = globals()['solver_name'], 
                 multi_investment_periods = False,
                 extra_functionality = extra_functionalities,
-                # number of tangents used for the piecewise linear approximation
                 transmission_losses = int(globals()['transmission_losses']),
                 assign_all_duals = bool(globals()['assign_all_duals']),
                 # kwargs includes e.g., solver_options
@@ -1652,9 +1649,9 @@ def do_optimization(
                 multi_investment_periods = True,
                 solver_name = globals()['solver_name'],
                 extra_functionality = extra_functionalities,
-                # number of tangents used for the piecewise linear approximation
                 transmission_losses = int(globals()['transmission_losses']),
                 assign_all_duals = bool(globals()['assign_all_duals']),
+                include_objective_constant=True,
                 # kwargs includes e.g., solver_options
                 **kwargs)
             #
@@ -1678,7 +1675,7 @@ def do_all_runs(
         n: pypsa.Network, 
         df_scens: pd.core.frame.DataFrame,
         df_stochs: pd.core.frame.DataFrame,
-        kwargs
+        kwargs: dict
     ) -> tuple [pypsa.Network, 
                 list, 
                 list, 
@@ -1743,7 +1740,8 @@ def do_all_runs(
         # do the investment optimization
         n, status, tc = do_optimization(
             n, 
-            inv_periods)
+            inv_periods,
+            kwargs)
         #
         # if optimization was successful, save the result and keep the 
         # results so they can be shown at the end of all runs
@@ -1791,7 +1789,6 @@ def do_all_runs(
                     overlap = overlap,
                 	solver_name = globals()['solver_name'], 
                 	extra_functionality = extra_functionalities,
-                    # number of tangents used for the piecewise linear approximation
                     transmission_losses = int(globals()['transmission_losses']),
                     assign_all_duals = bool(globals()['assign_all_duals']),
                     # kwargs includes e.g., solver_options
@@ -2668,6 +2665,74 @@ def remove_KVL_constraints(
     #
     return None
 
+def add_maintenance_constraints(
+        n: pypsa.Network, 
+        method: str = "monthly",
+    ) -> None:
+    """
+    Optimize maintenance start.
+    The following column in the individual DataFrames needs to be defined:
+        _opt_maint
+        _maint_duration
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    sns = n.snapshots
+    comps = pypsa.descriptors.nominal_attrs
+    col = '_opt_maint'
+    #
+    for c in comps:
+        if col in n.c[c].static.columns:
+            attr = comps[c]
+            techs = n.c[c].static.index
+            #
+            if method == "daily":
+                # allow one start per day (midnight)
+                start_times = sns[sns.hour == 0]
+            elif method == "weekly":
+                # allow one start per week (Monday 00:00)
+                start_times = sns[(sns.weekday == 0) & (sns.hour == 0)]
+            elif method == "monthly":
+                # allow one start per month (Day 1, 00:00)
+                start_times = sns[(sns.day == 1) & (sns.hour == 0)]
+            elif method == "hourly":
+                # otherwise allow start every hour
+                start_times = sns
+            #
+            # Binary maintenance start variable
+            m.add_variables(
+                binary=True,
+                coords=[start_times, techs],
+                name=f'{c}-maintenance_start')
+            #
+            z = m[f'{c}-maintenance_start']
+            constr_name = f'{c}-one_maintenance_per_option'
+            m.add_constraints(
+                z.sum(dim="snapshot") == 1, name=constr_name)
+            #
+            for t in techs:
+                for t_start in start_times:
+                    idx_start = sns.get_loc(t_start)
+                    affected = sns[idx_start: idx_start + n.c[c].static.at[t, '_maint_duration']]
+                    #
+                    if len(affected) > 0:
+                        constr_name = f'{c}-{t}-maintenance_off_{str(t_start).replace("-","")[0:8]}'
+                        m.add_constraints(
+                            n.model[f'{c}-{attr[0]}'].loc[affected, t]
+                                <= n.c[c].static.at[t, attr] * (1 - z.loc[t_start, t]),
+                            name=constr_name)
+    #
+    return None
+
 def extra_functionalities(
         n: pypsa.Network, 
         snapshots: pd.core.indexes.datetimes.DatetimeIndex
@@ -2719,12 +2784,15 @@ def extra_functionalities(
         if eval(globals()['do_investment_constraints']):
             invest_if_installed(n)
             min_capacity_if_installed(n)
+        #
+        if eval(globals()['do_maintenance_planing']):
+            add_maintenance_constraints(n, globals()['maintenance_mode'])
     #
     return None
 
 
 def check_oetc_usage(
-    ) -> tuple [kwargs]:
+    ) -> tuple:
     """
     Check if OETC should be used.
 
@@ -2768,6 +2836,8 @@ def check_oetc_usage(
     else:
         globals()['solver_name'] = 'highs'
     #
+    if 'kwargs' not in globals():
+        kwargs = {}
     kwargs['solver_options'] = get_solver_setting()
     print (f'OETC usage: {globals()['use_oetc']}')
     #
