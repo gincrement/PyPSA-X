@@ -160,7 +160,6 @@ if deactivate_network_viewers:
 
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
-#
 # source:
 # https://stackoverflow.com/questions/449560/how-do-i-determine-the-size-of-an-object-in-python
 #
@@ -242,17 +241,17 @@ def read_excel_data(
         os.makedirs(f'{target_folder}')
     #
     # collect the time of the xls file
-    xls_time = os.path.getmtime(excel_file)
+    excel_time = os.path.getmtime(excel_file)
     #
     # check if the NC base case file is available, if yes collect its timestamp
     if os.path.isfile(f'{target_folder}/{temp_file}'):
         nc_time = os.path.getmtime(f'{target_folder}/{temp_file}')
     #
     else:
-        nc_time  = xls_time
+        nc_time  = excel_time
     #
     # if the base case NC file is younger as the Excel file, recreate it
-    if (xls_time >= nc_time):
+    if (excel_time >= nc_time):
         print (f'read energy system details from {excel_file} ...')
         # createa PyPSA network from CSV files
         n = pypsa.Network(excel_file)
@@ -2745,7 +2744,7 @@ def remove_KVL_constraints(
     return None
 
 
-def consider_retirement_gains (
+def consider_retirement_gains(
         n: pypsa.Network, 
     ) -> None:
     """
@@ -3005,6 +3004,8 @@ def check_oetc_usage(
         print ('info! use local solver')
         globals()['solver_name'] = 'highs'
     #
+    if 'kwargs' not in globals():
+        kwargs = {}
     kwargs['solver_options'] = get_solver_setting()
     print (f'info! solver to use: {globals()['solver_name']}\n')
     #
