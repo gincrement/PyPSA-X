@@ -6,3 +6,6 @@
 # ignore directories
 .idea
 run_*
+# pixi environments
+.pixi/*
+!.pixi/config.toml

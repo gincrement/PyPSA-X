@@ -1,8 +1,8 @@
 # PyPSA-X - PyPSA for PtX and Microgrid projects
 
 **PyPSA-X** is an open-source Python framework for optimising and simulating **power-to-anything
-(PtX) projects** as well as **microgrid projects**. It builds on top of [PyPSA](https://github.com/PyPSA/PyPSA)
-which comes with the following main features:
+(PtX) projects** as well as **microgrid projects**. It builds on top of
+[PyPSA](https://github.com/PyPSA/PyPSA) which comes with the following main features:
 - Economic Dispatch (ED),
 - Linear Optimal Power Flow (LOPF),
 - Security-Constrained LOPF (SCLOPF),
@@ -72,7 +72,7 @@ pixi shell
 
 ## Usage
 ``` py
-$ python pypsa-x.py AB_v0.9.1.xlsx
+python pypsa-x.py AB_v0.9.1.xlsx
 ```
 
 This executes the **PyPSA-X** script and reads the assumption book 'AB_v0.9.1.xlsx' and follows

@@ -160,7 +160,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libxslt-1.1.43-h711ed8c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libzip-1.11.2-h6991a6a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.1-hb9d3cd8_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.6.3-pyhcf101f3_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.6.4-pyhcf101f3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/locket-1.0.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.10.0-h5888daf_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lzo-2.10-h280c20c_1002.conda
@@ -209,7 +209,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyopenssl-25.3.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.3.2-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyproj-3.7.2-py313h77f6078_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pypsa-1.0.7-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pypsa-1.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyside6-6.10.2-py313h85046ba_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyha55dd90_7.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pytables-3.10.2-py313h0546747_11.conda
@@ -2206,9 +2206,9 @@ packages:
   license_family: Other
   size: 60963
   timestamp: 1727963148474
-- conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.6.3-pyhcf101f3_1.conda
-  sha256: aa8548935746f0c81eb0fdb75797f5df3984abba6c048366aae6df3fac460539
-  md5: 98fd08c0fc8a9c55c463533c8cface53
+- conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.6.4-pyhcf101f3_1.conda
+  sha256: 0ceae20f49f14c6ca9be930cc93d0d1f7cd2aab68bfa4280780a28021d1bf651
+  md5: 6a084a7018cd5cb6d7a893e1f35ff506
   depends:
   - python >=3.11
   - numpy
@@ -2227,8 +2227,8 @@ packages:
   - python
   license: MIT
   license_family: MIT
-  size: 99018
-  timestamp: 1770806722203
+  size: 99786
+  timestamp: 1771443687935
 - conda: https://conda.anaconda.org/conda-forge/noarch/locket-1.0.0-pyhd8ed1ab_0.tar.bz2
   sha256: 9afe0b5cfa418e8bdb30d8917c5a6cec10372b037924916f1f85b9f4899a67a6
   md5: 91e27ef3d05cc772ce627e51cff111c4
@@ -2905,20 +2905,20 @@ packages:
   license_family: MIT
   size: 534602
   timestamp: 1757954997735
-- conda: https://conda.anaconda.org/conda-forge/noarch/pypsa-1.0.7-pyhd8ed1ab_0.conda
-  sha256: 6174a3b8fc5ff409e5b0f88eef9ba2b089f2fd9a8ba2d425b19c8ff546042e43
-  md5: e451a3c0ab3ad6fbe7bf83c59f0e2f9b
+- conda: https://conda.anaconda.org/conda-forge/noarch/pypsa-1.1.0-pyhd8ed1ab_0.conda
+  sha256: 588cea0e858a33690f4d5aaa634b9d52e5cf84934d8b13d6d3911618cbc4dbb7
+  md5: d5c919eb3a7124b47dff09883443aed2
   depends:
   - deprecation
   - geopandas >=0.9
   - highspy
   - levenshtein >=0.27.1
-  - linopy >=0.5.5
+  - linopy >=0.6.1
   - matplotlib-base
   - netcdf4 !=1.7.4
   - networkx >=2
   - numpy
-  - pandas >=0.24
+  - pandas >=2.0
   - plotly
   - pydeck >=0.6
   - pytables
@@ -2930,8 +2930,8 @@ packages:
   - xarray
   license: MIT
   license_family: MIT
-  size: 222295
-  timestamp: 1768392650051
+  size: 241956
+  timestamp: 1771401095410
 - conda: https://conda.anaconda.org/conda-forge/linux-64/pyside6-6.10.2-py313h85046ba_0.conda
   sha256: dc1382585d8c1a5426d1bec814ee9ecc13340137099a62183bcc5010b2fd0098
   md5: f6161781ceb86e9f5da1b532e4c4453c
