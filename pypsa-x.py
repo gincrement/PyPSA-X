@@ -28,8 +28,10 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+#
 from importlib.util import find_spec
 
+#
 if find_spec("pypsa"):
     import pandas as pd
     import numpy as np
@@ -38,17 +40,16 @@ if find_spec("pypsa"):
     import sys
     import os
     from datetime import datetime as dt
-    #
+#
 else:
     print("error! PyPSA is not installed\n")
     sys.exit(-1)
-
-default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xls"
-
+#
 # -----------------------------------------------------------------------------
 # No need to change code below this line ...
 # -----------------------------------------------------------------------------
 #
+default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xls"
 __version__ = "0.9.3-dev"
 #
 print(f"\nPtX / µgrid Optimizer v{__version__}")
@@ -77,8 +78,7 @@ print(
     "| furnished to do so.                                                            |"
 )
 print(("+" + "-" * 80 + "+\n"))
-
-
+#
 # check provided arguments on the command line
 if (len(sys.argv) > 1) and (sys.argv[0] != ""):
     if os.path.exists(sys.argv[1]):
@@ -91,24 +91,32 @@ if (len(sys.argv) > 1) and (sys.argv[0] != ""):
 #
 else:
     excel_filename = default_excel_filename
-
+#
 # check if the Excel file exists
 if not os.path.exists(excel_filename):
     print(f'error! the provided input file "{excel_filename}" does not exist\n')
     sys.exit(-1)
-
+#
 deactivate_network_viewers = True
-
-# optional packages are related to optional HTML network viewer and SVG result
-# graph
+#
+# optional packages are related to optional HTML network viewer and SVG result graph
 if find_spec("pypsa"):
-    import pandas as pd
-    import numpy as np
-    import networkx as nx
     import re
-    import pypsa
     from packaging import version
     import importlib
+    import sys
+    import uuid
+    import copy
+    import linopy
+    from linopy.remote.oetc import (
+        ComputeProvider,
+        OetcCredentials,
+        OetcHandler,
+        OetcSettings,
+    )
+    import tempfile
+    import warnings
+    import logging
 
     #
     PYPSA_VERSION = importlib.metadata.version("pypsa")
@@ -127,36 +135,19 @@ if find_spec("pypsa"):
         )
         sys.exit(-1)
     #
-    import linopy
-    from linopy.remote.oetc import (
-        ComputeProvider,
-        OetcCredentials,
-        OetcHandler,
-        OetcSettings,
-    )
-
+    # adjust some pandas settings
     pd.options.display.float_format = "{:,.2f}".format
     pd.options.display.max_rows = 100
     pd.options.display.max_columns = 100
     pd.options.display.width = 300
-    import sys
-    import uuid
-    import copy
-
     #
     # especially useful for Windows users
-    import tempfile
-
     tempfile.tempdir = os.getcwd()
     #
     # surpess Pythons warning messaging
-    import warnings
-
     warnings.filterwarnings("ignore")
     #
     # suppress PyPSA's logging messages
-    import logging
-
     logging.basicConfig(level=logging.ERROR)
     #
     print("imported all necessary libraries")
@@ -169,27 +160,25 @@ else:
 # graph
 if find_spec("pypsa_network_viewer"):
     from pypsa_network_viewer import html_viewer
-
     network_viewer = True
 #
 else:
     network_viewer = False
-
+#
 if find_spec("matplotlib.pyplot") and find_spec("networkx"):
     import matplotlib.pyplot as plt
     import networkx as nx
-
     networkx_viewer = True
 #
 else:
     networkx_viewer = False
-
+#
 if find_spec("tsam"):
     tsam_avail = True
 #
 else:
     tsam_avail = False
-
+#
 if deactivate_network_viewers:
     network_viewer = False
     networkx_viewer = False
@@ -197,14 +186,11 @@ if deactivate_network_viewers:
 
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
-
 # source:
 # https://stackoverflow.com/questions/449560/how-do-i-determine-the-size-of-an-object-in-python
-#
 def getsize(obj):
     from types import ModuleType, FunctionType
     from gc import get_referents
-
     #
     # Custom objects know their class.
     # Function objects seem to know way too much, including modules.
@@ -240,7 +226,6 @@ def getsize(obj):
 def random_string(string_length=10):
     """Returns a random string of length string_length."""
     import uuid
-
     random = str(uuid.uuid4())  # Convert UUID format to a Python string.
     random = random.upper()  # Make all characters uppercase.
     random = random.replace("-", "")  # Remove the UUID '-'.
