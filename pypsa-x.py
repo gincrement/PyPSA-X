@@ -14,56 +14,79 @@ Copyright (c) <year> <copyright holders>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
-including without limitation the rights to use, copy, modify, merge, publish, distribute, 
-sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is 
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or 
+The above copyright notice and this permission notice shall be included in all copies or
 substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT 
-NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from importlib.util import find_spec
 
-default_excel_filename = 'PyPSA_PtX_AB_v1.0.0.xls'
+if find_spec("pypsa"):
+    import pandas as pd
+    import numpy as np
+    import networkx as nx
+    import pypsa
+    import sys
+    import os
+    from datetime import datetime as dt
+    #
+else:
+    print("error! PyPSA is not installed\n")
+    sys.exit(-1)
+
+default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xls"
 
 # -----------------------------------------------------------------------------
 # No need to change code below this line ...
 # -----------------------------------------------------------------------------
+#
+__version__ = "0.9.3-dev"
+#
+print(f"\nPtX / µgrid Optimizer v{__version__}")
+print(f"(c) 2025-{dt.now().year}\n")
+print(("+" + "-" * 80 + "+"))
+print(
+    "| MIT License                                                                    |"
+)
+print(("| " + "=" * 11 + " " * 68 + "|"))
+print(
+    "| Permission is hereby granted, free of charge, to any person obtaining a copy   |"
+)
+print(
+    '| of this software and associated documentation files (the "Software"), to deal  |'
+)
+print(
+    "| in the Software without restriction, including without limitation the rights   |"
+)
+print(
+    "| to use,copy, modify, merge, publish, distribute, sublicense, and/or sell       |"
+)
+print(
+    "| copies of the Software, and to permit persons to whom the Software is          |"
+)
+print(
+    "| furnished to do so.                                                            |"
+)
+print(("+" + "-" * 80 + "+\n"))
 
-__version__ = '0.9.3-dev'
-
-from datetime import datetime
-
-print (f'\nPtX / µgrid Optimizer v{__version__}')
-print (f'(c) 2025-{datetime.now().year}\n')
-print (('+' + '-'*80 + '+'))
-print ('| MIT License                                                                    |')
-print (('| ' + '='*11 + ' '*68 + '|'))
-print ('| Permission is hereby granted, free of charge, to any person obtaining a copy   |')
-print ('| of this software and associated documentation files (the "Software"), to deal  |')
-print ('| in the Software without restriction, including without limitation the rights   |')
-print ('| to use,copy, modify, merge, publish, distribute, sublicense, and/or sell       |')
-print ('| copies of the Software, and to permit persons to whom the Software is          |')
-print ('| furnished to do so.                                                            |')
-print (('+' + '-'*80 + '+\n'))
-
-import os
-import sys
 
 # check provided arguments on the command line
-if (len(sys.argv) > 1) and \
-   (sys.argv[0] != ''):
+if (len(sys.argv) > 1) and (sys.argv[0] != ""):
     if os.path.exists(sys.argv[1]):
         excel_filename = sys.argv[1]
     #
     else:
-        print (f'error! provided XLSX file does not exist: {sys.argv[1]}\n')
-        print (f'fallback to default XLSX file: {default_excel_filename}\n')
+        print(f"error! provided XLSX file does not exist: {sys.argv[1]}\n")
+        print(f"fallback to default XLSX file: {default_excel_filename}\n")
         excel_filename = default_excel_filename
 #
 else:
@@ -71,24 +94,26 @@ else:
 
 # check if the Excel file exists
 if not os.path.exists(excel_filename):
-    print (f'error! the provided input file "{excel_filename}" does not exist\n')
-    sys.exit (-1)
+    print(f'error! the provided input file "{excel_filename}" does not exist\n')
+    sys.exit(-1)
 
 deactivate_network_viewers = True
 
-from importlib.util import find_spec
-
 # optional packages are related to optional HTML network viewer and SVG result
 # graph
-if find_spec('pypsa'):
+if find_spec("pypsa"):
+    import pandas as pd
+    import numpy as np
+    import networkx as nx
     import re
     import pypsa
     from packaging import version
     import importlib
+
     #
-    PYPSA_VERSION = importlib.metadata.version('pypsa')
+    PYPSA_VERSION = importlib.metadata.version("pypsa")
     PYPSA_V1 = bool(re.match(r"^1\.\d", PYPSA_VERSION))
-    PYPSA_VERSION_NEEDED = "1.1.0" # for tsam feature
+    PYPSA_VERSION_NEEDED = "1.1.0"  # for tsam feature
     #
     # make sure to use the new API
     pypsa.options.api.new_components_api = True
@@ -96,58 +121,70 @@ if find_spec('pypsa'):
     pypsa.options.set_option("params.statistics.round", 2)
     pypsa.options.set_option("debug.runtime_verification", False)
     #
-    if version.parse (PYPSA_VERSION) < version.parse ('1.0.0'):
-        print ('\nerror! installed PyPSA version ({PYPSA_VERSION)) not supported! need at least v1.0.0')
-        sys.exit (-1)
+    if version.parse(PYPSA_VERSION) < version.parse("1.0.0"):
+        print(
+            "\nerror! installed PyPSA version ({PYPSA_VERSION)) not supported! need at least v1.0.0"
+        )
+        sys.exit(-1)
     #
     import linopy
-    from linopy.remote.oetc import ComputeProvider, OetcCredentials, OetcHandler, OetcSettings
-    import pandas as pd
-    pd.options.display.float_format = '{:,.2f}'.format
+    from linopy.remote.oetc import (
+        ComputeProvider,
+        OetcCredentials,
+        OetcHandler,
+        OetcSettings,
+    )
+
+    pd.options.display.float_format = "{:,.2f}".format
     pd.options.display.max_rows = 100
     pd.options.display.max_columns = 100
     pd.options.display.width = 300
-    import numpy as np
     import sys
     import uuid
     import copy
+
     #
     # especially useful for Windows users
     import tempfile
+
     tempfile.tempdir = os.getcwd()
     #
     # surpess Pythons warning messaging
     import warnings
-    warnings.filterwarnings('ignore')
+
+    warnings.filterwarnings("ignore")
     #
     # suppress PyPSA's logging messages
     import logging
+
     logging.basicConfig(level=logging.ERROR)
     #
-    print ('imported all necessary libraries')
+    print("imported all necessary libraries")
     #
-else: 
-    print ('error! PyPSA is not installed\n')
+else:
+    print("error! PyPSA is not installed\n")
     sys.exit(-1)
 
 # optional packages are related to optional HTML network viewer and SVG result
 # graph
-if find_spec('pypsa_network_viewer'):
+if find_spec("pypsa_network_viewer"):
     from pypsa_network_viewer import html_viewer
+
     network_viewer = True
 #
 else:
     network_viewer = False
 
-if find_spec('matplotlib.pyplot') and find_spec('networkx'):
+if find_spec("matplotlib.pyplot") and find_spec("networkx"):
     import matplotlib.pyplot as plt
     import networkx as nx
+
     networkx_viewer = True
 #
 else:
     networkx_viewer = False
 
-if find_spec('tsam'):
+if find_spec("tsam"):
     tsam_avail = True
 #
 else:
@@ -160,12 +197,14 @@ if deactivate_network_viewers:
 
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
+
 # source:
 # https://stackoverflow.com/questions/449560/how-do-i-determine-the-size-of-an-object-in-python
 #
 def getsize(obj):
     from types import ModuleType, FunctionType
     from gc import get_referents
+
     #
     # Custom objects know their class.
     # Function objects seem to know way too much, including modules.
@@ -174,7 +213,7 @@ def getsize(obj):
     #
     """sum size of object & members."""
     if isinstance(obj, BLACKLIST):
-        raise TypeError('getsize() does not take argument of type: '+ str(type(obj)))
+        raise TypeError("getsize() does not take argument of type: " + str(type(obj)))
     #
     seen_ids = set()
     size = 0
@@ -184,8 +223,7 @@ def getsize(obj):
         need_referents = []
         #
         for obj in objects:
-            if (not isinstance(obj, BLACKLIST)) and \
-               (id(obj) not in seen_ids):
+            if (not isinstance(obj, BLACKLIST)) and (id(obj) not in seen_ids):
                 seen_ids.add(id(obj))
                 size += sys.getsizeof(obj)
                 need_referents.append(obj)
@@ -202,22 +240,23 @@ def getsize(obj):
 def random_string(string_length=10):
     """Returns a random string of length string_length."""
     import uuid
-    random = str(uuid.uuid4()) # Convert UUID format to a Python string.
-    random = random.upper() # Make all characters uppercase.
-    random = random.replace("-","") # Remove the UUID '-'.
-    return random[0:string_length] # Return the random string.
+
+    random = str(uuid.uuid4())  # Convert UUID format to a Python string.
+    random = random.upper()  # Make all characters uppercase.
+    random = random.replace("-", "")  # Remove the UUID '-'.
+    return random[0:string_length]  # Return the random string.
 
 
 def read_excel_data(
-        excel_file: str, 
-        target_folder: str = None, 
-        temp_file: str = None, 
-    ) -> None:
+    excel_file: str,
+    target_folder: str = None,
+    temp_file: str = None,
+) -> None:
     """
     Read the input Excel file (aka as Assumption Book) which contains all
-    the necessary PyPSA sheets to be exported (e.g., carriers, buses, 
+    the necessary PyPSA sheets to be exported (e.g., carriers, buses,
     generators, generators-p_max_pu, links).
-    
+
     Parameters
     ----------
     excel_file : str
@@ -237,104 +276,110 @@ def read_excel_data(
     """
     #
     # check if the required folder exist, if not create them
-    if not os.path.exists(f'{target_folder}'):
-        os.makedirs(f'{target_folder}')
+    if not os.path.exists(f"{target_folder}"):
+        os.makedirs(f"{target_folder}")
     #
     # collect the time of the xls file
     excel_time = os.path.getmtime(excel_file)
     #
     # check if the NC base case file is available, if yes collect its timestamp
-    if os.path.isfile(f'{target_folder}/{temp_file}'):
-        nc_time = os.path.getmtime(f'{target_folder}/{temp_file}')
+    if os.path.isfile(f"{target_folder}/{temp_file}"):
+        nc_time = os.path.getmtime(f"{target_folder}/{temp_file}")
     #
     else:
-        nc_time  = excel_time
+        nc_time = excel_time
     #
     # if the base case NC file is younger as the Excel file, recreate it
-    if (excel_time >= nc_time):
-        print (f'read energy system details from {excel_file} ...')
+    if excel_time >= nc_time:
+        print(f"read energy system details from {excel_file} ...")
         # create PyPSA network from CSV files
         n = pypsa.Network(excel_file)
         n.consistency_check()
         #
         # save ariginal base case as NC file
-        save_network(
-            n, 
-            f'{target_folder}/{temp_file.replace('.nc', '_rev0.nc')}')
+        save_network(n, f"{target_folder}/{temp_file.replace('.nc', '_rev0.nc')}")
         #
         # during model setup it might be useful to limit the snapshots to consider
-        if (eval(globals()['debug_mode'])) and \
-           (globals()['hours_to_optimize'] < 8760):
-            print (f'\ndebugging is enabled, therefore only {globals()['hours_to_optimize']} hours are considered in the optimization')
+        if (eval(globals()["debug_mode"])) and (globals()["hours_to_optimize"] < 8760):
+            print(
+                f"\ndebugging is enabled, therefore only {globals()['hours_to_optimize']} hours are considered in the optimization"
+            )
             n.set_snapshots(
                 pd.date_range(
-                    f'{globals()['project_cod']}-01-01', freq='h', 
-                    periods=globals()['hours_to_optimize']))
+                    f"{globals()['project_cod']}-01-01",
+                    freq="h",
+                    periods=globals()["hours_to_optimize"],
+                )
+            )
         #
         # # otherwise check if time segmentation should be done
-        elif (tsam_avail) and (eval(globals()['do_segmentation'])):
-            resolution = globals()['segmentation_hours']
+        elif (tsam_avail) and (eval(globals()["do_segmentation"])):
+            resolution = globals()["segmentation_hours"]
             hours = len(n.snapshots)
             # calculate number of segments equivalent to resolution
             segments = int(hours / resolution)
             #
-            print (f'use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ...')
+            print(
+                f"use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ..."
+            )
             #
             if not version.parse(PYPSA_VERSION) >= version.parse(PYPSA_VERSION_NEEDED):
-                print ('\nerror! installed PyPSA version ({PYPSA_VERSION)) does not support segmentation! need at least v{PYPSA_VERSION_NEEDED}')
-                sys.exit (-1)
+                print(
+                    "\nerror! installed PyPSA version ({PYPSA_VERSION)) does not support segmentation! need at least v{PYPSA_VERSION_NEEDED}"
+                )
+                sys.exit(-1)
             #
-            if globals()['segmentation_function'] == 'resample':
-                print (f'segmentation function: {globals()['segmentation_function']}')
-                m = n.cluster.temporal.resample(f'{hours}h')
+            if globals()["segmentation_function"] == "resample":
+                print(f"segmentation function: {globals()['segmentation_function']}")
+                m = n.cluster.temporal.resample(f"{hours}h")
             #
-            elif globals()['segmentation_function'] == 'downsample':
-                print (f'segmentation function: {globals()['segmentation_function']}')
+            elif globals()["segmentation_function"] == "downsample":
+                print(f"segmentation function: {globals()['segmentation_function']}")
                 m = n.cluster.temporal.downsample(hours)
             #
-            elif globals()['segmentation_function'] == 'segment':
-                print (f'segmentation function: {globals()['segmentation_function']}')
+            elif globals()["segmentation_function"] == "segment":
+                print(f"segmentation function: {globals()['segmentation_function']}")
                 if not n.has_periods:
                     m = n.cluster.temporal.segment(segments)
                 #
                 else:
-                    print ('warning! network has investment periods defined, therefore switch to "resample" ...')
-                    m = n.cluster.temporal.resample(f'{hours}h')
+                    print(
+                        'warning! network has investment periods defined, therefore switch to "resample" ...'
+                    )
+                    m = n.cluster.temporal.resample(f"{hours}h")
             #
             else:
-                print (f'error! segmentation function: {globals()['segmentation_function']} is not defined!')
-                sys.exit (-1)
+                print(
+                    f"error! segmentation function: {globals()['segmentation_function']} is not defined!"
+                )
+                sys.exit(-1)
         else:
             m = n
         #
-        inv_periods = np.array(eval(globals()['investment_periods']))
+        inv_periods = np.array(eval(globals()["investment_periods"]))
         n.set_investment_periods(inv_periods)
-        inv_weightings = np.array(eval(globals()['investment_weighting']))
+        inv_weightings = np.array(eval(globals()["investment_weighting"]))
         #
         for year in n.investment_period_weightings.index:
             pos = np.where(n.investment_period_weightings.index == year)
             n.investment_period_weightings.loc[year] = inv_weightings[pos]
         #
         # save adjusted case as NC file
-        save_network(
-            m, 
-            f'{target_folder}/{temp_file}')
+        save_network(m, f"{target_folder}/{temp_file}")
     #
     else:
-        print (f'no need to re-read energy system details from {excel_file}\n')
+        print(f"no need to re-read energy system details from {excel_file}\n")
     #
     return None
 
 
 def read_all_params(
-        excel_file: str
-    ) -> tuple [pd.core.frame.DataFrame, 
-                pd.core.frame.DataFrame, 
-                pd.core.frame.DataFrame]:
+    excel_file: str,
+) -> tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
     """
-    Read the optimization and scenario settings from the input Excel file 
+    Read the optimization and scenario settings from the input Excel file
     (aka as Assumption Book).
-    
+
     Parameters
     ----------
     excel_file : str
@@ -352,86 +397,81 @@ def read_all_params(
         Stochstic optimization details to be considered.
     """
     #
-    own_sheets = [
-        'opt_params', 
-        'scen_params',
-        'stoch_params']
+    own_sheets = ["opt_params", "scen_params", "stoch_params"]
     #
     # define some variables
     defaults = {
         # debug settings
-        'debug_mode': 'False',
-        'hours_to_optimize': (24*3),
+        "debug_mode": "False",
+        "hours_to_optimize": (24 * 3),
         # Other settings
-        'target_folder': f'./run_{uuid.uuid4().hex}',
-        'csv_subfolder': 'csv_model', # not necessary anymore
-        'temp_file': 'base_model.nc',
-        'result_file': 'result',
-        'use_oetc': 'False',
-        'do_segmentation': 'False',
-        'segmentation_function': 'segment',
-        'segmentation_hours': 4,
-        'run_scenarios': 'False',
-        'modular_representation': 'False',
-        'transmission_losses': '0',
-        'remove_kvl_constraints': 'False',
-        'do_maintenance_planing': 'False',
-        'maintenance_mode': 'monthly',
-        'do_operational_constraints': 'True',
-        'do_investment_constraints': 'True',
-        'do_milp_constraints': 'True',
-        'do_strict_unsimultaneous_dis+charging': 'False',
-        'assign_all_duals': 'True',
-        'small_limit': 0.00001,
-        'discount_factor': 0.06,
-        'years_of_construction': 4,
-        'project_cod': datetime.now().year,
-        'years_of_operation': 25,
-        'link_ports': 2,
-        'total_snapshot': 8760,
+        "target_folder": f"./run_{uuid.uuid4().hex}",
+        "csv_subfolder": "csv_model",  # not necessary anymore
+        "temp_file": "base_model.nc",
+        "result_file": "result",
+        "use_oetc": "False",
+        "do_segmentation": "False",
+        "segmentation_function": "segment",
+        "segmentation_hours": 4,
+        "run_scenarios": "False",
+        "modular_representation": "False",
+        "transmission_losses": "0",
+        "remove_kvl_constraints": "False",
+        "do_maintenance_planing": "False",
+        "maintenance_mode": "monthly",
+        "do_operational_constraints": "True",
+        "do_investment_constraints": "True",
+        "do_milp_constraints": "True",
+        "do_strict_unsimultaneous_dis+charging": "False",
+        "assign_all_duals": "True",
+        "small_limit": 0.00001,
+        "discount_factor": 0.06,
+        "years_of_construction": 4,
+        "project_cod": dt.now().year,
+        "years_of_operation": 25,
+        "link_ports": 2,
+        "total_snapshot": 8760,
         # general solver settings
-        'mipgap': 0.001,
-        'timelimit_in_hours': 1,
-        'timelimit': 3600,
-        'log_to_console': 0,
-        'output_flag': 0,
+        "mipgap": 0.001,
+        "timelimit_in_hours": 1,
+        "timelimit": 3600,
+        "log_to_console": 0,
+        "output_flag": 0,
         # stochastic optimization settings
-        'run_stochastic_runs': 'False',
-        'stoch_alpha': 0.9,
-        'stoch_omega': 0.5,
-        'stoch_case_definition': "{'P49': 0.49, 'P51': 0.51}",
+        "run_stochastic_runs": "False",
+        "stoch_alpha": 0.9,
+        "stoch_omega": 0.5,
+        "stoch_case_definition": "{'P49': 0.49, 'P51': 0.51}",
         # MGA settings
-        'run_mga_runs': 'False',
-        'mga_slack': 0.0,
-        'mga_slacks': '[0.01, 0.02, 0.05, 0.10]',
+        "run_mga_runs": "False",
+        "mga_slack": 0.0,
+        "mga_slacks": "[0.01, 0.02, 0.05, 0.10]",
         # Rolling Horizon (RH) settings
-        'run_rollinghorizon_after_optimization': 'False',
-        'rollinghorizon_horizon': (24+12),
-        'rollinghorizon_overlap': 12,
+        "run_rollinghorizon_after_optimization": "False",
+        "rollinghorizon_horizon": (24 + 12),
+        "rollinghorizon_overlap": 12,
         # security constraint settings
-        'run_security_constrained_optimization': 'False',
+        "run_security_constrained_optimization": "False",
         # some other settings
-        'investment_periods': '[2031]', # periods to optimize
-        'investment_weighting': '[1]', # weighting of periods; e.g, gap between 
-                                       # multiple years; e.g., 5 or 10
-        'primary_optimization': 'pathway',
-        'objective_function': 'annuity+o&m', # 'annuity-o&m', 'npv'
+        "investment_periods": "[2031]",  # periods to optimize
+        "investment_weighting": "[1]",  # weighting of periods; e.g, gap between
+        # multiple years; e.g., 5 or 10
+        "primary_optimization": "pathway",
+        "objective_function": "annuity+o&m",  # 'annuity-o&m', 'npv'
         # some reserve margin settings
-        'rm_activate': 'False',
-        'rm_factor_a': 1,
-        'rm_factor_b': 0.15,
-        'rm_factor_c': 0,
-        'rm_factor_d': 1,
-        'rm_factor_e': 0,
-        'rm_max_generator': 'False',
-        'rm_load_class': 'Load',
-        'rm_load_name': 'LOAD_EL_01',
+        "rm_activate": "False",
+        "rm_factor_a": 1,
+        "rm_factor_b": 0.15,
+        "rm_factor_c": 0,
+        "rm_factor_d": 1,
+        "rm_factor_e": 0,
+        "rm_max_generator": "False",
+        "rm_load_class": "Load",
+        "rm_load_name": "LOAD_EL_01",
     }
     #
-    print (f'\nread optimization and scenario settings from {excel_file} ...')
-    data = pd.read_excel(
-        excel_file, 
-        sheet_name=own_sheets)
+    print(f"\nread optimization and scenario settings from {excel_file} ...")
+    data = pd.read_excel(excel_file, sheet_name=own_sheets)
     #
     df_params = []
     scen_params = []
@@ -440,78 +480,90 @@ def read_all_params(
     for sheet_name, sheet_data in data.items():
         df = copy.deepcopy(sheet_data[2:])
         #
-        if sheet_name == 'opt_params':
-            print ('x) optimization parameters')
-            df.rename(columns={
-                df.columns[1]: 'variable',
-                df.columns[2]: 'value',
-                df.columns[3]: 'remark',
-                }, inplace=True)
-            df.set_index('variable', inplace=True)
+        if sheet_name == "opt_params":
+            print("x) optimization parameters")
+            df.rename(
+                columns={
+                    df.columns[1]: "variable",
+                    df.columns[2]: "value",
+                    df.columns[3]: "remark",
+                },
+                inplace=True,
+            )
+            df.set_index("variable", inplace=True)
             df.drop(labels=[df.columns[0]], axis=1, inplace=True)
             df_params = df.copy()
         #
-        elif sheet_name == 'scen_params':
-            print ('x) scenario parameters')
-            df.rename(columns={
-                df.columns[1]: 'scenario',
-                df.columns[2]: 'action',
-                df.columns[3]: 'class',
-                df.columns[4]: 'technology_name',
-                df.columns[5]: 'column',
-                df.columns[6]: 'value',
-                df.columns[7]: 'active',
-                }, inplace=True)
+        elif sheet_name == "scen_params":
+            print("x) scenario parameters")
+            df.rename(
+                columns={
+                    df.columns[1]: "scenario",
+                    df.columns[2]: "action",
+                    df.columns[3]: "class",
+                    df.columns[4]: "technology_name",
+                    df.columns[5]: "column",
+                    df.columns[6]: "value",
+                    df.columns[7]: "active",
+                },
+                inplace=True,
+            )
             df.drop(df.columns[0], axis=1, inplace=True)
             #
-            if eval(df_params.loc['run_scenarios'].value):
-                scen_params = df[df.active == 'True']
+            if eval(df_params.loc["run_scenarios"].value):
+                scen_params = df[df.active == "True"]
             #
             else:
-                scen_params = df[(df.active == 'True') & \
-                                 (df.scenario == df[df.active == 'True'].scenario.unique()[0])]
+                scen_params = df[
+                    (df.active == "True")
+                    & (df.scenario == df[df.active == "True"].scenario.unique()[0])
+                ]
         #
-        elif sheet_name == 'stoch_params':
-            print ('x) stochastic optimization parameters')
-            df.rename(columns={
-                df.columns[1]: 'scenario',
-                df.columns[2]: 'action',
-                df.columns[3]: 'class',
-                df.columns[4]: 'technology_name',
-                df.columns[5]: 'column',
-                df.columns[6]: 'value',
-                df.columns[7]: 'active',
-                }, inplace=True)
+        elif sheet_name == "stoch_params":
+            print("x) stochastic optimization parameters")
+            df.rename(
+                columns={
+                    df.columns[1]: "scenario",
+                    df.columns[2]: "action",
+                    df.columns[3]: "class",
+                    df.columns[4]: "technology_name",
+                    df.columns[5]: "column",
+                    df.columns[6]: "value",
+                    df.columns[7]: "active",
+                },
+                inplace=True,
+            )
             df.drop(df.columns[0], axis=1, inplace=True)
             #
-            stoch_params = df[df.active == 'True']
+            stoch_params = df[df.active == "True"]
         #
         else:
-            print (f'info! sheet {sheet_name} is not configured ...')
+            print(f"info! sheet {sheet_name} is not configured ...")
     #
-    print ('done.\n')
+    print("done.\n")
     #
     for default in defaults:
         if default in df_params.index:
-            globals()[f'{default}'] = df_params[df_params.index == default].value.iloc[0]
+            globals()[f"{default}"] = df_params[df_params.index == default].value.iloc[
+                0
+            ]
         #
         else:
-            globals()[f'{default}'] = defaults[default]
+            globals()[f"{default}"] = defaults[default]
     #
-    if globals()['primary_optimization'] == 'pathway':
-        globals()['multi_investment_periods'] = 'False'
+    if globals()["primary_optimization"] == "pathway":
+        globals()["multi_investment_periods"] = "False"
     #
     else:
-        globals()['multi_investment_periods'] = 'True'
+        globals()["multi_investment_periods"] = "True"
     #
     return df_params, scen_params, stoch_params
 
 
-def get_solver_setting (
-    ) -> dict:
+def get_solver_setting() -> dict:
     """
     Set the solver settings to control its behaviour during optimization.
-    
+
     Parameters
     ----------
     None
@@ -522,68 +574,69 @@ def get_solver_setting (
         Options to control the chosen optimization solver.
     """
     #
-    if globals()['solver_name'] == 'gurobi':
-        solver_options = {-
+    if globals()["solver_name"] == "gurobi":
+        solver_options = {
+            -
             # general solver settings
-            'mipgap' : globals()['mipgap'],
-            'outputflag' : globals()['output_flag'],
-            'logtoconsole' : globals()['log_to_console'],
-            'timelimit': globals()['timelimit'],
+            "mipgap": globals()["mipgap"],
+            "outputflag": globals()["output_flag"],
+            "logtoconsole": globals()["log_to_console"],
+            "timelimit": globals()["timelimit"],
             #
             # individual settings
-            'threads': 0,
-            'presolve': 1, 
-            'method': 4,
-            'numericfocus': 0,
-            'crossover': -1,
-            }
+            "threads": 0,
+            "presolve": 1,
+            "method": 4,
+            "numericfocus": 0,
+            "crossover": -1,
+        }
     #
-    elif globals()['solver_name'] == 'highs':
-         solver_options = {
-             # general solver settings
-             'mip_abs_gap' : globals()['mipgap'],
-             'output_flag' : bool(globals()['output_flag']),
-             'log_to_console' : bool(globals()['log_to_console']),
-             'time_limit': globals()['timelimit'],
-             #
-             # individual settings
-             'threads': 0,
-             'presolve': 'choose', # "off", "choose" or "on"; default: "choose"
-             'solver': 'choose', # "simplex", "choose", "ipm" or "pdlp".
-                                 # If "simplex"/"ipm"/"pdlp"; default: "choose"
-             'run_crossover': 'choose', # "off", "choose" or "on"; default: "on"
-             'user_objective_scale': -4,
-             }
+    elif globals()["solver_name"] == "highs":
+        solver_options = {
+            # general solver settings
+            "mip_abs_gap": globals()["mipgap"],
+            "output_flag": bool(globals()["output_flag"]),
+            "log_to_console": bool(globals()["log_to_console"]),
+            "time_limit": globals()["timelimit"],
+            #
+            # individual settings
+            "threads": 0,
+            "presolve": "choose",  # "off", "choose" or "on"; default: "choose"
+            "solver": "choose",  # "simplex", "choose", "ipm" or "pdlp".
+            # If "simplex"/"ipm"/"pdlp"; default: "choose"
+            "run_crossover": "choose",  # "off", "choose" or "on"; default: "on"
+            "user_objective_scale": -4,
+        }
     #
-    elif globals()['solver_name'] == 'cplex':
-         solver_options = {
-             # general solver settings
-             'mipgap' : globals()['mipgap'],
-             'outlev ' : globals()['output_flag'],
-             'log_to_console' : bool(globals()['log_to_console']),
-             'timelimit': globals()['timelimit'],
-             #
-             # individual settings
-             'threads': 0,
-             'presolve': 1, 
-             'method': 2,
-             'solutiontype': 2,
-             'numericfocus': 0,
-             }
+    elif globals()["solver_name"] == "cplex":
+        solver_options = {
+            # general solver settings
+            "mipgap": globals()["mipgap"],
+            "outlev ": globals()["output_flag"],
+            "log_to_console": bool(globals()["log_to_console"]),
+            "timelimit": globals()["timelimit"],
+            #
+            # individual settings
+            "threads": 0,
+            "presolve": 1,
+            "method": 2,
+            "solutiontype": 2,
+            "numericfocus": 0,
+        }
     #
     else:
-         solver_options = {}
+        solver_options = {}
     #
     return solver_options
 
 
 def validate_scenario_adjustments(
-        temp_file: str, 
-        df_scens: pd.core.frame.DataFrame,
-    ) -> bool:
+    temp_file: str,
+    df_scens: pd.core.frame.DataFrame,
+) -> bool:
     """
     Validate the provided scenario adjustments.
-    
+
     Parameters
     ----------
     temp_file: str
@@ -598,47 +651,55 @@ def validate_scenario_adjustments(
         Boolean of all envisioned adjustments are possible.
     """
     #
-    print ('load the temporary network model to validate the scenario changes ...')
+    print("load the temporary network model to validate the scenario changes ...")
     n = pypsa.Network(temp_file)
     all_adjustments_ok = True
     #
     for scenario in df_scens.scenario.unique():
         # load the temporary model to ensure starting from the same point
         for index, row in df_scens[(df_scens.scenario == scenario)].iterrows():
-            if row['class'] != 'Python':
-                df = n.c[row['class']].static
+            if row["class"] != "Python":
+                df = n.c[row["class"]].static
             #
-            if row['action'] == 'set':
-                if row['class'] == 'Python': # change variable in Python
-                    if not row['column'] in globals():
-                        print (f'info! set variable {row['column']} = {row['value']} would not work')
+            if row["action"] == "set":
+                if row["class"] == "Python":  # change variable in Python
+                    if row["column"] not in globals():
+                        print(
+                            f"info! set variable {row['column']} = {row['value']} would not work"
+                        )
                         all_adjustments_ok = False
                 #
                 else:
-                    if not (row['technology_name'] in df.index and \
-                            row['column'] in df.columns):
-                        print (f'info! set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']} would not work')
+                    if not (
+                        row["technology_name"] in df.index
+                        and row["column"] in df.columns
+                    ):
+                        print(
+                            f"info! set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']} would not work"
+                        )
                         all_adjustments_ok = False
             #
-            elif row['action'] == 'del':
-                if not (row['technology_name'] in df.index):
-                    print (f'info! del {row['class']}.{row['technology_name']} would not work')
+            elif row["action"] == "del":
+                if row["technology_name"] not in df.index:
+                    print(
+                        f"info! del {row['class']}.{row['technology_name']} would not work"
+                    )
                     all_adjustments_ok = False
     #
-    print ('')
+    print("")
     return all_adjustments_ok
 
 
 def update_network(
-        n: pypsa.Network,
-        df_adjusts: pd.core.frame.DataFrame, 
-        scenario: str,
-        stoch_scenarios: str = None,
-    ) -> pypsa.Network:
+    n: pypsa.Network,
+    df_adjusts: pd.core.frame.DataFrame,
+    scenario: str,
+    stoch_scenarios: str = None,
+) -> pypsa.Network:
     """
     Reads the basecase PyPSA network and adjust settings for a given scenario
     based on the data in the DataFrame scenarios.
-    
+
     Parameters
     ----------
     n: pypsa.Network
@@ -656,91 +717,126 @@ def update_network(
         PyPSA network containing the new scenario to optimize.
     """
     #
-    if stoch_scenarios == None:
+    if stoch_scenarios is None:
         # loop for non-stochastic adjustments
         #
         for index, row in df_adjusts[(df_adjusts.scenario == scenario)].iterrows():
-            if row['class'] != 'Python':
-                df = n.c[row['class']].static
+            if row["class"] != "Python":
+                df = n.c[row["class"]].static
             #
-            if row['action'] == 'set':
-                if row['class'] == 'Python': # change variable in Python
-                    if row['column'] in globals():
-                        print (f'x) set variable {row['column']} = {row['value']}')
-                        globals()[row['column']] = row['value']
+            if row["action"] == "set":
+                if row["class"] == "Python":  # change variable in Python
+                    if row["column"] in globals():
+                        print(f"x) set variable {row['column']} = {row['value']}")
+                        globals()[row["column"]] = row["value"]
                     #
                     else:
-                        print (f'info! set variable {row['column']} = {row['value']} does not work')
+                        print(
+                            f"info! set variable {row['column']} = {row['value']} does not work"
+                        )
                 #
                 else:
-                    if row['technology_name'] in df.index and \
-                       row['column'] in df.columns:
-                        print (f'x) set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}')
-                        df.loc[row['technology_name'], row['column']] = row['value']
+                    if (
+                        row["technology_name"] in df.index
+                        and row["column"] in df.columns
+                    ):
+                        print(
+                            f"x) set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}"
+                        )
+                        df.loc[row["technology_name"], row["column"]] = row["value"]
                     #
                     else:
-                        print (f'info! set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']} does not work')
+                        print(
+                            f"info! set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']} does not work"
+                        )
             #
-            elif row['action'] == 'del':
-                if row['technology_name'] in df.index:
-                    print (f'x) del {row['class']}.{row['technology_name']}')
-                    n.remove(row['class'], row['technology_name'])
+            elif row["action"] == "del":
+                if row["technology_name"] in df.index:
+                    print(f"x) del {row['class']}.{row['technology_name']}")
+                    n.remove(row["class"], row["technology_name"])
                 #
                 else:
-                    print (f'info! del {row['class']}.{row['technology_name']} does not work')
+                    print(
+                        f"info! del {row['class']}.{row['technology_name']} does not work"
+                    )
     #
     else:
         # loop for stochastic adjustments
         #
         for index, row in df_adjusts.iterrows():
-            if row['class'] != 'Python':
-                df = n.c[row['class']].static
-                dfd = n.c[row['class']].dynamic
+            if row["class"] != "Python":
+                df = n.c[row["class"]].static
+                dfd = n.c[row["class"]].dynamic
             #
-            if row['action'] == 'set':
+            if row["action"] == "set":
                 # check within the static dataframe
-                if row['scenario'] in df.index and \
-                   row['column'] in df.columns and \
-                      row['technology_name'] in df.index.get_level_values('name'):
-                    print (f'x) {row['scenario']}: set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}')
-                    df.loc[[(row['scenario'], row['technology_name'])], row['column']] = row['value']
+                if (
+                    row["scenario"] in df.index
+                    and row["column"] in df.columns
+                    and row["technology_name"] in df.index.get_level_values("name")
+                ):
+                    print(
+                        f"x) {row['scenario']}: set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}"
+                    )
+                    df.loc[
+                        [(row["scenario"], row["technology_name"])], row["column"]
+                    ] = row["value"]
                 #
                 # check within the dynamic dataframe
-                if row['scenario'] in df.index and \
-                   row['column'] in df.columns and \
-                      row['technology_name'] in df.index.get_level_values('name'):
-                    print (f'x) {row['scenario']}: set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}')
-                    df.loc[[(row['scenario'], row['technology_name'])], row['column']] = row['value']
+                if (
+                    row["scenario"] in df.index
+                    and row["column"] in df.columns
+                    and row["technology_name"] in df.index.get_level_values("name")
+                ):
+                    print(
+                        f"x) {row['scenario']}: set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}"
+                    )
+                    df.loc[
+                        [(row["scenario"], row["technology_name"])], row["column"]
+                    ] = row["value"]
                 #
                 else:
-                    print (f'info! {row['scenario']}: set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']} does not work')
+                    print(
+                        f"info! {row['scenario']}: set {row['class']}.{row['technology_name']}.{row['column']} = {row['value']} does not work"
+                    )
             #
-            elif row['action'] == 'del':
+            elif row["action"] == "del":
                 # check within the static dataframe
-                if row['scenario'] in df.index and \
-                   row['column'] in df.columns and \
-                      row['technology_name'] in df.index.get_level_values('name'):
-                    print (f'x) {row['scenario']}: del {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}')
-                    df.loc[[(row['scenario'], row['technology_name'])], row['column']] = 0 # row['value']
+                if (
+                    row["scenario"] in df.index
+                    and row["column"] in df.columns
+                    and row["technology_name"] in df.index.get_level_values("name")
+                ):
+                    print(
+                        f"x) {row['scenario']}: del {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}"
+                    )
+                    df.loc[
+                        [(row["scenario"], row["technology_name"])], row["column"]
+                    ] = 0  # row['value']
                 #
                 # check within the dynamic dataframe
-                if row['column'] in dfd and \
-                   (row['scenario'], row['technology_name']) in dfd['p_set'].columns:
-                    print (f'x) {row['scenario']}: del {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}')
-                    dfd[row['column']][[(row['scenario'], row['technology_name'])]] = 0
+                if (
+                    row["column"] in dfd
+                    and (row["scenario"], row["technology_name"])
+                    in dfd["p_set"].columns
+                ):
+                    print(
+                        f"x) {row['scenario']}: del {row['class']}.{row['technology_name']}.{row['column']} = {row['value']}"
+                    )
+                    dfd[row["column"]][[(row["scenario"], row["technology_name"])]] = 0
     #
     return n
 
 
 def read_and_update_network(
-        temp_file: str, 
-        df_scens: pd.core.frame.DataFrame = pd.core.frame.DataFrame(), 
-        scenario: str = None
-    ) -> pypsa.Network:
+    temp_file: str,
+    df_scens: pd.core.frame.DataFrame = pd.core.frame.DataFrame(),
+    scenario: str = None,
+) -> pypsa.Network:
     """
     Reads the basecase PyPSA network and adjust settings for a given scenario
     based on the data in the DataFrame scenarios.
-    
+
     Parameters
     ----------
     temp_file: str
@@ -761,62 +857,58 @@ def read_and_update_network(
     n = pypsa.Network(temp_file)
     #
     if len(df_scens) > 0:
-        n = update_network(
-            n,
-            df_scens, 
-            scenario)
+        n = update_network(n, df_scens, scenario)
     #
     comps = pypsa.descriptors.nominal_attrs
-    col ='mod'
+    col = "mod"
     #
     # create individual units for the technologies having 'nom_mod' defined
-    if eval(globals()['modular_representation']):
+    if eval(globals()["modular_representation"]):
         # loop through all components
         for c in comps:
             # >> Exclude Line and Transformer as the power flow implementation in
             #    PyPSA can't deal with extendable line and transformer components
-            if c not in ['Line', 'Transformer', 'StorageUnit']:
+            if c not in ["Line", "Transformer", "StorageUnit"]:
                 attr = comps[c]
-                df = n.c[c].static.query(f'{attr}_{col} > 0')
+                df = n.c[c].static.query(f"{attr}_{col} > 0")
                 #
                 for idx, row in df.iterrows():
-                    num_adds = int(row[f'{attr}_max'] // row[f'{attr}_{col}'])
-                    print (f'info! add {num_adds} modules for {c}.{idx}')
+                    num_adds = int(row[f"{attr}_max"] // row[f"{attr}_{col}"])
+                    print(f"info! add {num_adds} modules for {c}.{idx}")
                     #
-                    # create new lines based on the 
+                    # create new lines based on the
                     dfs = pd.concat([df[df.index == idx].copy()] * num_adds)
                     dfs2 = dfs.reset_index()
                     #
-                    for i in range(1, num_adds+1):
-                        # ensure a slightly difference in the economic ranking of the 
+                    for i in range(1, num_adds + 1):
+                        # ensure a slightly difference in the economic ranking of the
                         # individual capital_cost's
-                        dfs2.at[i-1, 'name'] = f'{dfs2.at[i-1, 'name']}_mod_{str(i).rjust(len(str(num_adds)), '0')}'
-                        dfs2.at[i-1, 'capital_cost'] -= (num_adds - i + 2) * 0.0001
-                        dfs2.at[i-1, f'{attr}_max'] = dfs2.at[i-1, f'{attr}_{col}']
-                        dfs2.at[i-1, f'{attr}_mod'] = 0
+                        dfs2.at[i - 1, "name"] = (
+                            f"{dfs2.at[i - 1, 'name']}_mod_{str(i).rjust(len(str(num_adds)), '0')}"
+                        )
+                        dfs2.at[i - 1, "capital_cost"] -= (num_adds - i + 2) * 0.0001
+                        dfs2.at[i - 1, f"{attr}_max"] = dfs2.at[i - 1, f"{attr}_{col}"]
+                        dfs2.at[i - 1, f"{attr}_mod"] = 0
                     #
-                    dfs = dfs2.set_index('name')
+                    dfs = dfs2.set_index("name")
                     #
                     # add all the new candidates
-                    n.add(
-                        c, 
-                        name=dfs.index, 
-                        **dfs)
+                    n.add(c, name=dfs.index, **dfs)
     #
     # remove unused and/or unusable components (nom=0 & nom_max=0)
-    n = remove_unused_details (n)
-    inv_periods = np.array(eval(globals()['investment_periods']))
+    n = remove_unused_details(n)
+    inv_periods = np.array(eval(globals()["investment_periods"]))
     #
     return n, inv_periods
 
 
 def save_network(
-        n: pypsa.Network, 
-        file_name: str,
-    ) -> None:
+    n: pypsa.Network,
+    file_name: str,
+) -> None:
     """
     Save a given PyPSA network as NetCDF file.
-    
+
     Parameters
     ----------
     n: pypsa.Network
@@ -830,7 +922,7 @@ def save_network(
     None
     """
     #
-    print (f'save PyPSA network as "{file_name}"')
+    print(f'save PyPSA network as "{file_name}"')
     # delete target file if exists
     if os.path.exists(file_name):
         os.remove(file_name)
@@ -842,13 +934,11 @@ def save_network(
 
 
 def save_network_svg(
-        n: pypsa.Network,
-        file_name: str,
-        small_limit: float = 0.0001
-    ) -> nx.Graph:
+    n: pypsa.Network, file_name: str, small_limit: float = 0.0001
+) -> nx.Graph:
     """
     Save a given PyPSA network as SVG file.
-    
+
     Parameters
     ----------
     n: pypsa.Network
@@ -866,95 +956,98 @@ def save_network_svg(
         Result graph
     """
     #
-    print (f'save network as "{file_name}"')
+    print(f'save network as "{file_name}"')
     # collect the colors of the carriers
     comps = pypsa.descriptors.nominal_attrs
-    c1 = 'Bus'
-    c2 = 'Carrier'
-    colors = n.c[c1].static.join(n.c[c2].static, on='carrier', 
-                                 lsuffix='_c', rsuffix='_o')[['carrier', 'color']]
+    c1 = "Bus"
+    c2 = "Carrier"
+    colors = n.c[c1].static.join(
+        n.c[c2].static, on="carrier", lsuffix="_c", rsuffix="_o"
+    )[["carrier", "color"]]
     #
     # to avoid networkx' random positioning we use the random seed feature
     np.random.seed(42)
     G = nx.Graph()
     #
     # add all buses as they have distribution technologies
-    c = 'Bus'
+    c = "Bus"
     df = n.c[c].static
     #
     for bus in df.index:
         node_color = colors[colors.index == bus].color.iloc[0]
-        G.add_node(
-            node_for_adding = bus, 
-            node_color = node_color)
+        G.add_node(node_for_adding=bus, node_color=node_color)
     #
     # add load nodes
-    c = 'Load'
-    df = n.c[c].static.query('p_set > 0')
+    c = "Load"
+    df = n.c[c].static.query("p_set > 0")
     #
     for load in df.index:
         node_color = colors[colors.index == df.bus[load]].color.iloc[0]
-        G.add_node(
-            node_for_adding = load, 
-            node_color = node_color)
+        G.add_node(node_for_adding=load, node_color=node_color)
     #
-    # get the largest 
-    max_activity = max(
-        n.c['Link'].dynamic['p0'].abs().sum().sum(),
-        n.c['Generator'].dynamic['p'].abs().sum().sum(),
-        n.c['Store'].dynamic['p'].abs().sum().sum(),
-        n.c['StorageUnit'].dynamic['p'].abs().sum().sum()/2) / 10
+    # get the largest
+    max_activity = (
+        max(
+            n.c["Link"].dynamic["p0"].abs().sum().sum(),
+            n.c["Generator"].dynamic["p"].abs().sum().sum(),
+            n.c["Store"].dynamic["p"].abs().sum().sum(),
+            n.c["StorageUnit"].dynamic["p"].abs().sum().sum() / 2,
+        )
+        / 10
+    )
     #
-    if not small_limit: small_limit = globals()['small_limit']
+    if not small_limit:
+        small_limit = globals()["small_limit"]
     #
     # loop through all components
     for c in comps:
         attr = comps[c]
-        df = n.c[c].static.query(f'{attr}_opt > '+str(small_limit))
+        df = n.c[c].static.query(f"{attr}_opt > " + str(small_limit))
         #
         for t in df.index:
-            if 'bus0' in df.columns:
+            if "bus0" in df.columns:
                 node_color = colors[colors.index == df.bus0.loc[t]].color.iloc[0]
             #
             else:
-                node_color = 'black'
+                node_color = "black"
             #
             # add the technology nodes (e.g., generator, link, transformer)
-            G.add_node(
-                node_for_adding = t, 
-                node_color = 'black')
+            G.add_node(node_for_adding=t, node_color="black")
             #
             # if there is a bus0 there are more buses
-            if 'bus0' in df.columns:
-                buses = [col for col in df if col.startswith('bus')]
+            if "bus0" in df.columns:
+                buses = [col for col in df if col.startswith("bus")]
                 #
                 for bus in buses:
-                    edge_from = df[df.index == t]['bus0'].values[0]
+                    edge_from = df[df.index == t]["bus0"].values[0]
                     edge_to = df[df.index == t][bus].values[0]
                     #
                     if len(edge_to) > 0:
-                        edge_color = colors[colors.index == df.loc[t][bus]].color.iloc[0]
+                        edge_color = colors[colors.index == df.loc[t][bus]].color.iloc[
+                            0
+                        ]
                         #
-                        if t in n.c[c].dynamic[f'p{bus[3:]}']:
-                            tech_sum = n.c[c].dynamic[f'p{bus[3:]}'][t].abs().sum()
+                        if t in n.c[c].dynamic[f"p{bus[3:]}"]:
+                            tech_sum = n.c[c].dynamic[f"p{bus[3:]}"][t].abs().sum()
                         #
                         else:
                             tech_sum = 0
                         #
-                        edge_width = max(0.1,  tech_sum / max_activity)
+                        edge_width = max(0.1, tech_sum / max_activity)
                         G.add_edge(
-                            # u_of_edge = edge_from, 
-                            u_of_edge = t, 
-                            v_of_edge = edge_to,
-                            color = edge_color, 
-                            weight = edge_width,
-                            style = 'solid',
-                            label = t)
+                            # u_of_edge = edge_from,
+                            u_of_edge=t,
+                            v_of_edge=edge_to,
+                            color=edge_color,
+                            weight=edge_width,
+                            style="solid",
+                            label=t,
+                        )
             #
             # otherwise there is only the column 'bus'
             else:
-                bus = 'bus'
-                if c in ['Generator']:
+                bus = "bus"
+                if c in ["Generator"]:
                     edge_from = t
                     edge_to = df[df.index == t][bus].values[0]
                 #
@@ -963,45 +1056,47 @@ def save_network_svg(
                     edge_to = t
                 #
                 edge_color = colors[colors.index == df.loc[t][bus]].color.iloc[0]
-                if t in n.c[c].dynamic['p']:
-                    tech_sum = n.c[c].dynamic['p'][t].abs().sum()
+                if t in n.c[c].dynamic["p"]:
+                    tech_sum = n.c[c].dynamic["p"][t].abs().sum()
                 #
                 else:
                     tech_sum = 0
                 #
                 if tech_sum > 0:
-                    edge_width = max(0.1,  tech_sum / max_activity)
+                    edge_width = max(0.1, tech_sum / max_activity)
                     G.add_edge(
-                        u_of_edge = edge_from, 
-                        v_of_edge = edge_to,
-                        color = edge_color, 
-                        weight = edge_width,
-                        style = 'solid',
-                        label = t)
+                        u_of_edge=edge_from,
+                        v_of_edge=edge_to,
+                        color=edge_color,
+                        weight=edge_width,
+                        style="solid",
+                        label=t,
+                    )
     #
     # add load edges
-    c = 'Load'
-    df = n.c[c].static.query('p_set > 0')
+    c = "Load"
+    df = n.c[c].static.query("p_set > 0")
     #
     for load in df.index:
         edge_from = load
         edge_to = df.bus[load]
         edge_color = colors[colors.index == df.bus[load]].color.iloc[0]
-        tech_sum = n.c[c].dynamic['p_set'][load].abs().sum()
+        tech_sum = n.c[c].dynamic["p_set"][load].abs().sum()
         #
         if tech_sum > 0:
-            edge_width = max(0.1,  tech_sum / max_activity)
+            edge_width = max(0.1, tech_sum / max_activity)
             G.add_edge(
-                u_of_edge = edge_from, 
-                v_of_edge = edge_to,
-                color = edge_color, 
-                weight = edge_width,
-                style = 'solid',
-                label = t)
+                u_of_edge=edge_from,
+                v_of_edge=edge_to,
+                color=edge_color,
+                weight=edge_width,
+                style="solid",
+                label=t,
+            )
     #
-    edge_colors = nx.get_edge_attributes(G, 'color').values()
-    weights = nx.get_edge_attributes(G, 'weight').values()
-    labels = dict([((n1, n2), d['label']) for n1, n2, d in G.edges(data=True)])
+    edge_colors = nx.get_edge_attributes(G, "color").values()
+    weights = nx.get_edge_attributes(G, "weight").values()
+    labels = dict([((n1, n2), d["label"]) for n1, n2, d in G.edges(data=True)])
     # styles = nx.get_edge_attributes(G, 'style').values()
     # fig = plt.figure(1, figsize=(20, 10), dpi=300)
     plt.figure(1, figsize=(16, 8), dpi=300)
@@ -1010,22 +1105,19 @@ def save_network_svg(
     # pos = nx.fruchterman_reingold_layout(G, k=0.54, iterations=100)
     pos = nx.arf_layout(G)
     nx.draw(
-        G = G,
-        pos = pos, 
-        edge_color = edge_colors, 
-        width = list(weights),
-        node_color = 'lightgreen',
-        font_size = 12)
+        G=G,
+        pos=pos,
+        edge_color=edge_colors,
+        width=list(weights),
+        node_color="lightgreen",
+        font_size=12,
+    )
     #
     nx.draw_networkx_edge_labels(
-        G = G, 
-        pos = pos, 
-        edge_labels = labels, 
-        label_pos = 0.5,
-        font_color = 'black',
-        font_size = 6)
+        G=G, pos=pos, edge_labels=labels, label_pos=0.5, font_color="black", font_size=6
+    )
     #
-    plt.title('Optimized energy system')
+    plt.title("Optimized energy system")
     plt.savefig(file_name, dpi=300)
     plt.show()
     plt.close()
@@ -1033,12 +1125,10 @@ def save_network_svg(
     return G
 
 
-def remove_unused_details(
-        n: pypsa.Network
-    ) -> pypsa.Network:
+def remove_unused_details(n: pypsa.Network) -> pypsa.Network:
     """
     Save a given PyPSA network as SVG file.
-    
+
     Parameters
     ----------
     n: pypsa.Network
@@ -1060,16 +1150,16 @@ def remove_unused_details(
         attr = comps[c]
         #
         # if nom and nom_max is 0 the technology option is not used
-        df = n.c[c].static.query(f'({attr} == 0) & ({attr}_max == 0)')
+        df = n.c[c].static.query(f"({attr} == 0) & ({attr}_max == 0)")
         if len(df) > 0:
             unused.append(df.index)
             n.remove(c, df.index)
         #
     #
-    print ('\nremove unused technologies:')
+    print("\nremove unused technologies:")
     #
     for t in unused:
-        print (f'x) {t}')
+        print(f"x) {t}")
     #
     # remove unused buses
     df1 = pd.Series()
@@ -1080,35 +1170,33 @@ def remove_unused_details(
         df = n.c[c].static
         #
         # for t in df.index:
-        for col in [col for col in df.columns if col.startswith('bus')]:
+        for col in [col for col in df.columns if col.startswith("bus")]:
             for t, row in df.iterrows():
                 val1 = df[col].loc[t]
                 #
-                if (val1 != '') and \
-                    ((df[attr].loc[t] > 0) or
-                     (df[f'{attr}_max'].loc[t] > 0)):
+                if (val1 != "") and (
+                    (df[attr].loc[t] > 0) or (df[f"{attr}_max"].loc[t] > 0)
+                ):
                     df1 = pd.concat([df1, pd.Series(df[col].loc[t])])
     #
-    c = 'Bus'
+    c = "Bus"
     df = n.c[c].static.index[~n.c[c].static.index.isin(df1)]
     if len(df) > 0:
-        n.remove('Bus', df)
-        print ('\nunused buses:')
+        n.remove("Bus", df)
+        print("\nunused buses:")
         #
         for bus in list(df):
-            print (f'x) {bus}')
+            print(f"x) {bus}")
     else:
-        print ()
+        print()
     #
     return n
 
 
-def adjust_for_rollinghorizon(
-        n: pypsa.Network
-    ) -> pypsa.Network:
+def adjust_for_rollinghorizon(n: pypsa.Network) -> pypsa.Network:
     """
     Adjust network for rolling horizon run.
-    
+
     Parameters
     ----------
     n: pypsa.Network
@@ -1128,46 +1216,46 @@ def adjust_for_rollinghorizon(
         attr = comps[c]
         df = n.c[c].static
         #
-        if attr+'_extendable' in df.columns:
-            df[attr+'_extendable'] = False
+        if attr + "_extendable" in df.columns:
+            df[attr + "_extendable"] = False
         #
         # curtailing technologies should be available just in case
-        if '_curtail_option' in df.columns:
-            df.loc[(df['_curtail_option'] == True) & (df[attr+'_opt']>0), attr] = np.inf
+        if "_curtail_option" in df.columns:
+            df.loc[(df["_curtail_option"]) & (df[attr + "_opt"] > 0), attr] = np.inf
         #
         # emergency technologies should be available just in case
-        if '_emergency_option' in df.columns:
-            df.loc[df['_emergency_option'] == True, attr] = np.inf
+        if "_emergency_option" in df.columns:
+            df.loc[df["_emergency_option"], attr] = np.inf
         #
-        if 'committable' in df.columns:
-            df['committable'] = True
+        if "committable" in df.columns:
+            df["committable"] = True
         #
-        if 'cyclic_state_of_charge' in df.columns:
-            df['cyclic_state_of_charge'] = False
+        if "cyclic_state_of_charge" in df.columns:
+            df["cyclic_state_of_charge"] = False
         #
-        if 'e_cyclic' in df.columns:
-            df['e_cyclic'] = False
+        if "e_cyclic" in df.columns:
+            df["e_cyclic"] = False
         #
-        if 'state_of_charge_initial' in df.columns:
-            df['state_of_charge_initial'] = 0
-        # 
-        if 'e_initial' in df.columns:
-            df['e_initial'] = 0
+        if "state_of_charge_initial" in df.columns:
+            df["state_of_charge_initial"] = 0
+        #
+        if "e_initial" in df.columns:
+            df["e_initial"] = 0
     #
     return n
 
 
 def create_summaries(
-        n: pypsa.Network, 
-        scenario: str, 
-        list_results: list,
-        list_supplies: list,
-        list_balances: list,
-        list_curtailments: list,
-        create_html: bool = False,
-    ) -> list:
+    n: pypsa.Network,
+    scenario: str,
+    list_results: list,
+    list_supplies: list,
+    list_balances: list,
+    list_curtailments: list,
+    create_html: bool = False,
+) -> list:
     """
-    Shows the result in a standardized way and keeps the result in a 
+    Shows the result in a standardized way and keeps the result in a
     dictiionary.
 
     Parameters
@@ -1206,15 +1294,15 @@ def create_summaries(
     #
     # save results as a NC file
     save_network(
-        n, 
-        f'{globals()['target_folder']}/{globals()['result_file']}_{scenario}.nc')
+        n, f"{globals()['target_folder']}/{globals()['result_file']}_{scenario}.nc"
+    )
     #
     if n.has_scenarios:
-        no_cases = len(eval(globals()['stoch_case_definition']))
+        no_cases = len(eval(globals()["stoch_case_definition"]))
     else:
         no_cases = 1
     #
-    print ('\nlist of optimized technologies:')
+    print("\nlist of optimized technologies:")
     comps = pypsa.descriptors.nominal_attrs
     data = []
     #
@@ -1223,84 +1311,124 @@ def create_summaries(
         df = n.c[c].static
         attr = comps[c]
         #
-        for t in df.query(f'{attr}_opt > '+str(globals()['small_limit'])).index.get_level_values('name').unique():
+        for t in (
+            df.query(f"{attr}_opt > " + str(globals()["small_limit"]))
+            .index.get_level_values("name")
+            .unique()
+        ):
             if n.has_scenarios:
-                data.append([t, df[df.index.get_level_values('name') == t][f'{attr}_opt'].mean()])
+                data.append(
+                    [
+                        t,
+                        df[df.index.get_level_values("name") == t][
+                            f"{attr}_opt"
+                        ].mean(),
+                    ]
+                )
             else:
-                data.append([t, df[f'{attr}_opt'].loc[t]])
+                data.append([t, df[f"{attr}_opt"].loc[t]])
     #
-    data.append(['_', '-'])
-    data.append(['_duration(sec)', (n.duration)])
-    data.append(['_timesteps(-)', (float(len(n.snapshots)))])
-    data.append(['_memory(MBytes)', (getsize(n)/10**6)])
-    data.append(['__obj(mn)', (n.objective/1e6)])
-    data.append(['__totex(mn)', (n.statistics.opex(nice_names=False).sum().sum() + \
-                                 n.statistics.capex(nice_names=False).sum().sum())/1e6/no_cases])
-    data.append(['___capex(mn)', (n.statistics.capex(nice_names=False).sum().sum())/1e6/no_cases])
-    data.append(['___opex(mn)', (n.statistics.opex(nice_names=False).sum().sum())/1e6/no_cases])
+    data.append(["_", "-"])
+    data.append(["_duration(sec)", (n.duration)])
+    data.append(["_timesteps(-)", (float(len(n.snapshots)))])
+    data.append(["_memory(MBytes)", (getsize(n) / 10**6)])
+    data.append(["__obj(mn)", (n.objective / 1e6)])
+    data.append(
+        [
+            "__totex(mn)",
+            (
+                n.statistics.opex(nice_names=False).sum().sum()
+                + n.statistics.capex(nice_names=False).sum().sum()
+            )
+            / 1e6
+            / no_cases,
+        ]
+    )
+    data.append(
+        [
+            "___capex(mn)",
+            (n.statistics.capex(nice_names=False).sum().sum()) / 1e6 / no_cases,
+        ]
+    )
+    data.append(
+        [
+            "___opex(mn)",
+            (n.statistics.opex(nice_names=False).sum().sum()) / 1e6 / no_cases,
+        ]
+    )
     #
     # convert data array into a DataFrame and set index
-    df_res = pd.DataFrame(
-        data, 
-        columns=['technology', scenario]).set_index('technology')
+    df_res = pd.DataFrame(data, columns=["technology", scenario]).set_index(
+        "technology"
+    )
     #
     # show results summary table (capacities being built/used)
-    print (df_res.sort_index())
+    print(df_res.sort_index())
     list_results.append(pd.DataFrame(df_res))
     #
     # prepare energy balance statistics
     if n.has_scenarios:
-        levels = [0,3]
+        levels = [0, 3]
     else:
-        levels = [0,1]
+        levels = [0, 1]
     #
-    df = pd.DataFrame(
-        n.statistics.energy_balance(nice_names=False)).groupby(level=levels, axis=0).mean()
+    df = (
+        pd.DataFrame(n.statistics.energy_balance(nice_names=False))
+        .groupby(level=levels, axis=0)
+        .mean()
+    )
     df.columns = [scenario]
     list_supplies.append(df)
     #
     # prepare supply statistics
     if n.has_scenarios:
-        levels = [0,2]
+        levels = [0, 2]
     else:
-        levels = [0,1]
+        levels = [0, 1]
     #
-    df = pd.DataFrame(
-        n.statistics.supply(nice_names=False)).groupby(level=levels, axis=0).mean()
+    df = (
+        pd.DataFrame(n.statistics.supply(nice_names=False))
+        .groupby(level=levels, axis=0)
+        .mean()
+    )
     df.columns = [scenario]
     list_balances.append(df)
     #
     # prepare supply statistics
     if n.has_scenarios:
-        levels = [0,2]
+        levels = [0, 2]
     else:
-        levels = [0,1]
+        levels = [0, 1]
     #
-    df = pd.DataFrame(
-        n.statistics.curtailment(nice_names=False)).groupby(level=levels, axis=0).mean()
+    df = (
+        pd.DataFrame(n.statistics.curtailment(nice_names=False))
+        .groupby(level=levels, axis=0)
+        .mean()
+    )
     df.columns = [scenario]
     list_curtailments.append(df)
     #
-   # optional: generate interactive result viewer (HTML)
+    # optional: generate interactive result viewer (HTML)
     if network_viewer:
         html_viewer(
             n,
-            file_name = f'{globals()['target_folder']}/{globals()['result_file']}_{scenario}.html',
-            title = f'Network Analysis ({scenario})')
+            file_name=f"{globals()['target_folder']}/{globals()['result_file']}_{scenario}.html",
+            title=f"Network Analysis ({scenario})",
+        )
     #
     # optional: generate SVG network
     if networkx_viewer:
         save_network_svg(
-            n, 
-            f'{globals()['target_folder']}/{globals()['result_file']}_{scenario}.svg')
+            n, f"{globals()['target_folder']}/{globals()['result_file']}_{scenario}.svg"
+        )
     #
     return list_results, list_supplies, list_balances, list_curtailments
 
 
 def set_optimized_capacities(
-        n: pypsa.Network, 
-        period: int = 0,
-    ) -> pd.core.frame.DataFrame:
+    n: pypsa.Network,
+    period: int = 0,
+) -> pd.core.frame.DataFrame:
     """
     Set nom capacities based on optimization result (nom_opt).
 
@@ -1320,40 +1448,42 @@ def set_optimized_capacities(
     comps = pypsa.descriptors.nominal_attrs
     #
     if n.is_solved:
-        print ('................ set nom = nom_opt ..................')
+        print("................ set nom = nom_opt ..................")
         #
         # loop through all components
         for c in comps:
             attr = comps[c]
             if period > 0:
                 df = n.c[c].static
-                df[df.build_year == period][attr] = \
-                    df[df.build_year == period][f'{attr}_opt']
-                df[df.build_year == period][f'{attr}_min'] = \
-                    df[df.build_year == period][f'{attr}_opt']
-                df[df.build_year == period][f'{attr}_max'] = \
-                    df[df.build_year == period][f'{attr}_opt']
-                df.loc[df.build_year == period][f'{attr}_extendable'] = \
-                    False
+                df[df.build_year == period][attr] = df[df.build_year == period][
+                    f"{attr}_opt"
+                ]
+                df[df.build_year == period][f"{attr}_min"] = df[
+                    df.build_year == period
+                ][f"{attr}_opt"]
+                df[df.build_year == period][f"{attr}_max"] = df[
+                    df.build_year == period
+                ][f"{attr}_opt"]
+                df.loc[df.build_year == period][f"{attr}_extendable"] = False
             #
             else:
-                df[attr] = df[f'{attr}_opt']
-                df[f'{attr}_min'] = df[f'{attr}_opt']
-                df[f'{attr}_max'] = df[f'{attr}_opt']
-                df.loc[f'{attr}_extendable'] = False
+                df[attr] = df[f"{attr}_opt"]
+                df[f"{attr}_min"] = df[f"{attr}_opt"]
+                df[f"{attr}_max"] = df[f"{attr}_opt"]
+                df.loc[f"{attr}_extendable"] = False
     #
     else:
-        print ('!! cannot set optimal capacities as n.is_solved = False !!')
+        print("!! cannot set optimal capacities as n.is_solved = False !!")
     #
     return None
 
 
 def show_case_comparison(
-        list_results: list,
-        list_supplies: list, 
-        list_balances: list,
-        list_curtailments: list,
-    ) -> pd.core.frame.DataFrame:
+    list_results: list,
+    list_supplies: list,
+    list_balances: list,
+    list_curtailments: list,
+) -> pd.core.frame.DataFrame:
     """
     Creates a case comparison table.
 
@@ -1376,8 +1506,8 @@ def show_case_comparison(
     df: pd.core.frame.DataFrame
         Table with capacities of all conducted runs.
     """
-    print ('\n'+'-'*40+'\n')
-    df = pd.concat(list_results, axis=1).sort_index().replace(np.nan, '-')
+    print("\n" + "-" * 40 + "\n")
+    df = pd.concat(list_results, axis=1).sort_index().replace(np.nan, "-")
     next_col = None
     col_pos = 1
     df_col = 1
@@ -1386,17 +1516,17 @@ def show_case_comparison(
         # ignore the first column as it is not possible to compare it
         # against another result
         if next_col:
-            new_col = f'{df_col}:{df_col+1}'
+            new_col = f"{df_col}:{df_col + 1}"
             df.insert(col_pos, new_col, 0)
             #
             for index, row in df.iterrows():
-                if (df[next_col].loc[index] != '-') and \
-                   (df[col].loc[index] != '-'):
-                       df[new_col].loc[index] = \
-                           df[col].loc[index] / df[next_col].loc[index]
+                if (df[next_col].loc[index] != "-") and (df[col].loc[index] != "-"):
+                    df[new_col].loc[index] = (
+                        df[col].loc[index] / df[next_col].loc[index]
+                    )
                 #
                 else:
-                    df[new_col].loc[index] = '-'
+                    df[new_col].loc[index] = "-"
             #
             next_col = col
             df_col = df_col + 1
@@ -1405,21 +1535,19 @@ def show_case_comparison(
         else:
             next_col = col
     #
-    print (f'{df}\n')
-    print (f'{pd.concat(list_supplies, axis=1).sort_index().replace(np.nan, '-')}\n')
-    print (f'{pd.concat(list_balances, axis=1).sort_index().replace(np.nan, '-')}\n')
-    print (f'{pd.concat(list_curtailments, axis=1).sort_index().replace(np.nan, '-')}\n')
+    print(f"{df}\n")
+    print(f"{pd.concat(list_supplies, axis=1).sort_index().replace(np.nan, '-')}\n")
+    print(f"{pd.concat(list_balances, axis=1).sort_index().replace(np.nan, '-')}\n")
+    print(f"{pd.concat(list_curtailments, axis=1).sort_index().replace(np.nan, '-')}\n")
     #
     return df
 
 
 def do_optimization(
-        n: pypsa.Network,
-        inv_periods: np.ndarray,
-        kwargs: dict,
-    ) -> tuple [pypsa.Network, 
-                str, 
-                str]:
+    n: pypsa.Network,
+    inv_periods: np.ndarray,
+    kwargs: dict,
+) -> tuple[pypsa.Network, str, str]:
     """
     Initiate the optimization run.
 
@@ -1446,132 +1574,139 @@ def do_optimization(
         Termination code of the optimization.
     """
     #
-    start_time = datetime.now()
+    start_time = dt.now()
     #
     # do the investment optimization (either pathway or myopic)
-    if globals()['primary_optimization'] == 'pathway':
-        print ('\ndo full horizon / pathway optimization')
+    if globals()["primary_optimization"] == "pathway":
+        print("\ndo full horizon / pathway optimization")
         #
         # start optimizing the network
-        if globals()['objective_function'] == 'annuity+o&m':
-            print ('use standard min(annuity+O&M) target function')
+        if globals()["objective_function"] == "annuity+o&m":
+            print("use standard min(annuity+O&M) target function")
             status, tc = n.optimize(
-                snapshots = n.snapshots,
-            	solver_name = globals()['solver_name'], 
-                multi_investment_periods = False,
-            	extra_functionality = extra_functionalities,
-                transmission_losses = int(globals()['transmission_losses']),
-                assign_all_duals = bool(globals()['assign_all_duals']),
+                snapshots=n.snapshots,
+                solver_name=globals()["solver_name"],
+                multi_investment_periods=False,
+                extra_functionality=extra_functionalities,
+                transmission_losses=int(globals()["transmission_losses"]),
+                assign_all_duals=bool(globals()["assign_all_duals"]),
                 include_objective_constant=True,
                 # kwargs includes e.g., solver_options
-                **kwargs)
-        #
-        elif globals()['objective_function'] == 'npv':
-            print ('use adjusted max(NPV) target function')
-            n.optimize.create_model(
-                include_objective_constant=True
+                **kwargs,
             )
+        #
+        elif globals()["objective_function"] == "npv":
+            print("use adjusted max(NPV) target function")
+            n.optimize.create_model(include_objective_constant=True)
             m = n.model
-            discount_rate = globals()['discount_factor']
-            investment_years = globals()['years_of_construction']
-            operation_years = globals()['years_of_operation']
-            df_capex = sum(1 / (1 + discount_rate) ** y for y in range(1, investment_years+1))
-            df_opex = sum(1 / (1 + discount_rate) ** (investment_years + y) for y in range(1, operation_years+1))
+            discount_rate = globals()["discount_factor"]
+            investment_years = globals()["years_of_construction"]
+            operation_years = globals()["years_of_operation"]
+            df_capex = sum(
+                1 / (1 + discount_rate) ** y for y in range(1, investment_years + 1)
+            )
+            df_opex = sum(
+                1 / (1 + discount_rate) ** (investment_years + y)
+                for y in range(1, operation_years + 1)
+            )
             #
             capex = 0
             comps = pypsa.descriptors.nominal_attrs
             for c in comps:
                 df = n.c[c].static
                 #
-                if f'{comps[c]}_extendable' in df.columns:
-                    mask = df[f'{comps[c]}_extendable']
-                    var_name = f'{c}-{comps[c]}'
+                if f"{comps[c]}_extendable" in df.columns:
+                    mask = df[f"{comps[c]}_extendable"]
+                    var_name = f"{c}-{comps[c]}"
                     #
                     if mask.any():
                         var = m.variables[var_name].loc[mask.index[mask]]
-                        capital_cost = df.loc[mask, 'capital_cost']
+                        capital_cost = df.loc[mask, "capital_cost"]
                         capex += (var * capital_cost).sum()
             #
             # is it assumed to invest capex in constant shares over the investment period
             capex /= investment_years
             #
             opex = 0
-            weights = n.snapshot_weightings['objective']
-            col = '_bg_marginal_cost'
+            weights = n.snapshot_weightings["objective"]
+            col = "_bg_marginal_cost"
             for c in n.branch_components | n.one_port_components:
-                if 'marginal_cost' in n.c[c]['attrs']:
+                if "marginal_cost" in n.c[c]["attrs"]:
                     if c in m.variables:
-                        var = m.variables[f'{c}-p']
-                        mc = n.df(c)['marginal_cost']
+                        var = m.variables[f"{c}-p"]
+                        mc = n.df(c)["marginal_cost"]
                         bg = 0
                         #
                         if col in df.cols:
-                            bg = n.df(c)['_background_cost']
+                            bg = n.df(c)["_background_cost"]
                         #
-                        opex += ( (var * (mc+bg)) * weights).sum()
+                        opex += ((var * (mc + bg)) * weights).sum()
             #
             m.objective = -(opex * df_opex + capex * df_capex)
             m.objective.sense = "max"
-            status = 'nok'
-            tc = 'normal'
+            status = "nok"
+            tc = "normal"
             #
             status, tc = n.optimize.solve_model(
-            	solver_name = globals()['solver_name'], 
-                multi_investment_periods = False,
-                extra_functionality = extra_functionalities,
-                transmission_losses = int(globals()['transmission_losses']),
-                assign_all_duals = bool(globals()['assign_all_duals']),
+                solver_name=globals()["solver_name"],
+                multi_investment_periods=False,
+                extra_functionality=extra_functionalities,
+                transmission_losses=int(globals()["transmission_losses"]),
+                assign_all_duals=bool(globals()["assign_all_duals"]),
                 # kwargs includes e.g., solver_options
-                **kwargs)
+                **kwargs,
+            )
         #
         else:
-            print (f'\nerror! Provided objective function method not allowed: {globals()['objective_function']}')
-            sys.exit (0)
-            
+            print(
+                f"\nerror! Provided objective function method not allowed: {globals()['objective_function']}"
+            )
+            sys.exit(0)
+
     #
-    elif globals()['primary_optimization'] == 'myopic':
-        print ('\ndo year by year / myopic optimization')
+    elif globals()["primary_optimization"] == "myopic":
+        print("\ndo year by year / myopic optimization")
         #
         for period in inv_periods:
             # limit the snapshots to the current year
-            snapshots = n.snapshots[n.snapshots.get_level_values('period') == period]
+            snapshots = n.snapshots[n.snapshots.get_level_values("period") == period]
             status, tc = n.optimize(
-                snapshots = snapshots,
-                multi_investment_periods = True,
-                solver_name = globals()['solver_name'],
-                extra_functionality = extra_functionalities,
-                transmission_losses = int(globals()['transmission_losses']),
-                assign_all_duals = bool(globals()['assign_all_duals']),
+                snapshots=snapshots,
+                multi_investment_periods=True,
+                solver_name=globals()["solver_name"],
+                extra_functionality=extra_functionalities,
+                transmission_losses=int(globals()["transmission_losses"]),
+                assign_all_duals=bool(globals()["assign_all_duals"]),
                 include_objective_constant=True,
                 # kwargs includes e.g., solver_options
-                **kwargs)
+                **kwargs,
+            )
             #
             # if one execution was not successful, stop it
-            if status != 'ok':
+            if status != "ok":
                 return n, status, tc
             #
             set_optimized_capacities(n, period)
     #
     else:
-        print (f'\nerror! Provided primary optimization method not allowed: {globals()['primary_optimization']}')
-        sys.exit (0)
+        print(
+            f"\nerror! Provided primary optimization method not allowed: {globals()['primary_optimization']}"
+        )
+        sys.exit(0)
     #
-    end_time = datetime.now()
+    end_time = dt.now()
     n.duration = (end_time - start_time).total_seconds()
-    print (f'optimization duration: {round(n.duration,2)}\n')
+    print(f"optimization duration: {round(n.duration, 2)}\n")
     #
     return n, status, tc
 
 
 def do_all_runs(
-        n: pypsa.Network, 
-        df_scens: pd.core.frame.DataFrame,
-        df_stochs: pd.core.frame.DataFrame,
-        kwargs: dict
-    ) -> tuple [pypsa.Network, 
-                list, 
-                list, 
-                list]:
+    n: pypsa.Network,
+    df_scens: pd.core.frame.DataFrame,
+    df_stochs: pd.core.frame.DataFrame,
+    kwargs: dict,
+) -> tuple[pypsa.Network, list, list, list]:
     """
     Do the necessary optimization tasks.
 
@@ -1586,7 +1721,7 @@ def do_all_runs(
     df_stochs: pd.core.frame.DataFrame
         Stochastic optimization information being considered.
 
-    kwargs: 
+    kwargs:
         keyword arguments.
 
     Returns
@@ -1616,38 +1751,36 @@ def do_all_runs(
     list_curtailments = []
     #
     # loop through scenario definitions
-    if globals()['run_scenarios'] == 'False':
-        print ('info! only one scenario will be assessed\n')
+    if globals()["run_scenarios"] == "False":
+        print("info! only one scenario will be assessed\n")
     #
     for scenario in df_scens.scenario.unique():
-        print ('-'*40+'\n')
-        print (f'>>>>> do scenario {scenario}')
+        print("-" * 40 + "\n")
+        print(f">>>>> do scenario {scenario}")
         # load the temporary model to ensure starting from the same point
-        print ('load the temporary network model ...')
+        print("load the temporary network model ...")
         n, inv_periods = read_and_update_network(
-            f'{globals()['target_folder']}/{globals()['temp_file']}', 
-            df_scens, 
-            scenario)
+            f"{globals()['target_folder']}/{globals()['temp_file']}", df_scens, scenario
+        )
         #
         # do the investment optimization
-        n, status, tc = do_optimization(
-            n, 
-            inv_periods,
-            kwargs)
+        n, status, tc = do_optimization(n, inv_periods, kwargs)
         #
-        # if optimization was successful, save the result and keep the 
+        # if optimization was successful, save the result and keep the
         # results so they can be shown at the end of all runs
-        if status == 'ok':
-            list_results, list_supplies, list_balances, list_curtailments = \
+        if status == "ok":
+            list_results, list_supplies, list_balances, list_curtailments = (
                 create_summaries(
-                    n, 
+                    n,
                     scenario,
                     list_results,
-                    list_supplies, 
+                    list_supplies,
                     list_balances,
-                    list_curtailments)
+                    list_curtailments,
+                )
+            )
             #
-            if not eval(globals()['multi_investment_periods']):
+            if not eval(globals()["multi_investment_periods"]):
                 w = n.investment_period_weightings.objective
             #
             else:
@@ -1655,76 +1788,81 @@ def do_all_runs(
             #
             m = n.model
             # save the results of the first run for potential MGA runs
-            if eval(globals()['run_mga_runs']):
-                globals()['optimal_cost'] = m.objective.value
-                globals()['fixed_cost'] = (n.statistics.installed_capex().sum() * w).sum()
+            if eval(globals()["run_mga_runs"]):
+                globals()["optimal_cost"] = m.objective.value
+                globals()["fixed_cost"] = (
+                    n.statistics.installed_capex().sum() * w
+                ).sum()
             #
-            # do dispatch after optimization 
-            if eval(globals()['run_rollinghorizon_after_optimization']):
-                print ('\ndo rolling horizon (dispatch only) optimization after investment optimization ...')
-                horizon = globals()['rollinghorizon_horizon']
-                overlap = globals()['rollinghorizon_overlap']
-                print (f'using {horizon} hours horizon with {overlap} hours overlap')
+            # do dispatch after optimization
+            if eval(globals()["run_rollinghorizon_after_optimization"]):
+                print(
+                    "\ndo rolling horizon (dispatch only) optimization after investment optimization ..."
+                )
+                horizon = globals()["rollinghorizon_horizon"]
+                overlap = globals()["rollinghorizon_overlap"]
+                print(f"using {horizon} hours horizon with {overlap} hours overlap")
                 #
                 # fix the optimal capacities
                 n.optimize.fix_optimal_capacities()
                 n = adjust_for_rollinghorizon(n)
                 #
                 # save conditions for later resetting
-                save_cond_invest = globals()['do_investment_constraints']
+                save_cond_invest = globals()["do_investment_constraints"]
                 #
-                globals()['do_investment_constraints'] = 'False'
+                globals()["do_investment_constraints"] = "False"
                 #
-                start_time = datetime.now()
+                start_time = dt.now()
                 n.optimize.optimize_with_rolling_horizon(
-                    horizon = horizon,
-                    overlap = overlap,
-                	solver_name = globals()['solver_name'], 
-                	extra_functionality = extra_functionalities,
-                    transmission_losses = int(globals()['transmission_losses']),
-                    assign_all_duals = bool(globals()['assign_all_duals']),
+                    horizon=horizon,
+                    overlap=overlap,
+                    solver_name=globals()["solver_name"],
+                    extra_functionality=extra_functionalities,
+                    transmission_losses=int(globals()["transmission_losses"]),
+                    assign_all_duals=bool(globals()["assign_all_duals"]),
                     # kwargs includes e.g., solver_options
-                    **kwargs)
+                    **kwargs,
+                )
                 #
                 # restore the saved conditions
-                globals()['do_investment_constraints'] = save_cond_invest
+                globals()["do_investment_constraints"] = save_cond_invest
                 #
-                end_time = datetime.now()
+                end_time = dt.now()
                 n.duration = (end_time - start_time).total_seconds()
-                print (f'optimization duration: {round(n.duration,2)}\n')
+                print(f"optimization duration: {round(n.duration, 2)}\n")
                 #
-                list_results, list_supplies, list_balances, list_curtailments = \
+                list_results, list_supplies, list_balances, list_curtailments = (
                     create_summaries(
-                        n, 
-                        f'{scenario}_rh', 
+                        n,
+                        f"{scenario}_rh",
                         list_results,
-                        list_supplies, 
+                        list_supplies,
                         list_balances,
-                        list_curtailments)
+                        list_curtailments,
+                    )
+                )
                 #
-                c = 'Generator'
+                c = "Generator"
                 df = n.c[c].static
-                emerg_power = n.c[c].dynamic.p.sum() \
-                    [df._emergency_option].sum().round(1)
-                print (f'\nconsumed emergency energy: {round(emerg_power,2)} MWh')
+                emerg_power = (
+                    n.c[c].dynamic.p.sum()[df._emergency_option].sum().round(1)
+                )
+                print(f"\nconsumed emergency energy: {round(emerg_power, 2)} MWh")
     #
     return n, list_results, list_supplies, list_balances, list_curtailments, status, tc
 
 
 # EXTRA FUNCTIONALITY FUNCTIONS ----------------------------------------------
 
-def validate_technology_exists(
-        n: pypsa.Network, 
-        c: str = None, 
-        t: str = None
-    ) -> bool:
+
+def validate_technology_exists(n: pypsa.Network, c: str = None, t: str = None) -> bool:
     """
     Validate if a given technology name is available in a given component type.
-    
+
     Parameters
     ----------
     n: pypsa.Network
-        PyPSA network to asses the validity of a given component and technology 
+        PyPSA network to asses the validity of a given component and technology
         combination.
 
     c: str = None,
@@ -1743,19 +1881,18 @@ def validate_technology_exists(
     comps = pypsa.descriptors.nominal_attrs
     df = n.c[c].static
     #
-    if (c in comps.keys()) and \
-        (t in df[df.index.get_level_values('name') == t].index.get_level_values('name')):
+    if (c in comps.keys()) and (
+        t in df[df.index.get_level_values("name") == t].index.get_level_values("name")
+    ):
         return True
     #
     else:
-        print (c, t)
-        print (f'info! technology {c}.{t} does not exist')
+        print(c, t)
+        print(f"info! technology {c}.{t} does not exist")
         return False
 
 
-def link_capacities(
-        n: pypsa.Network
-    ) -> None:
+def link_capacities(n: pypsa.Network) -> None:
     """
     Link the capacities of individual technology options (e.g., CHARGER_BES and
     DISCHARGER_BES). The following columns in the individual DataFrames needs to
@@ -1778,7 +1915,7 @@ def link_capacities(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_linked_class'
+    col = "_linked_class"
     #
     # loop through all components
     for c in comps:
@@ -1786,7 +1923,7 @@ def link_capacities(
         #
         if col in df.columns:
             # loop through all technology options of the class
-            for t in df.index.get_level_values('name').unique():
+            for t in df.index.get_level_values("name").unique():
                 row = df.loc[t]
                 #
                 # the scenario name comes before the technology name
@@ -1794,24 +1931,26 @@ def link_capacities(
                     t = t[1]
                 #
                 # if column '_linked_class' is defined prepare adding the constraint
-                if not str(row[col]) in ['', 'nan'] and \
-                    '_linked_class' in row and \
-                    '_linked_technology' in row and \
-                    '_linked_sign' in row and \
-                    '_linked_multiplier' in row and \
-                    '_linked_rhs' in row:
+                if (
+                    str(row[col]) not in ["", "nan"]
+                    and "_linked_class" in row
+                    and "_linked_technology" in row
+                    and "_linked_sign" in row
+                    and "_linked_multiplier" in row
+                    and "_linked_rhs" in row
+                ):
                     class1 = c
                     tech1 = t
-                    class2 = row['_linked_class']
-                    tech2 = row['_linked_technology']
-                    sign = row['_linked_sign']
-                    factor1 = row['_linked_multiplier']
-                    factor2 = row['_linked_rhs']
+                    class2 = row["_linked_class"]
+                    tech2 = row["_linked_technology"]
+                    sign = row["_linked_sign"]
+                    factor1 = row["_linked_multiplier"]
+                    factor2 = row["_linked_rhs"]
                     #
-                    # validate if the linked technologies do exist    
+                    # validate if the linked technologies do exist
                     valid1 = validate_technology_exists(n, class1, tech1)
                     valid2 = validate_technology_exists(n, class2, tech2)
-                    constr_name = f'Link-capacities-{class1}.{tech1}-{class2}.{tech2}'
+                    constr_name = f"Link-capacities-{class1}.{tech1}-{class2}.{tech2}"
                     #
                     # if the technology definition is valid, add the constraint
                     if valid1 and valid2:
@@ -1819,27 +1958,25 @@ def link_capacities(
                         nom_col1 = comps[class1]
                         nom_col2 = comps[class2]
                         #
-                        link1_cap = m.variables[f'{class1}-{nom_col1}'].loc[tech1]
-                        link2_cap = m.variables[f'{class2}-{nom_col2}'].loc[tech2]
+                        link1_cap = m.variables[f"{class1}-{nom_col1}"].loc[tech1]
+                        link2_cap = m.variables[f"{class2}-{nom_col2}"].loc[tech2]
                         #
                         # add the constraints
                         if constr_name not in m.constraints:
                             con = link1_cap - factor1 * link2_cap == factor2
                             con.sign = sign
                             m.add_constraints(con, name=constr_name)
-                            print (f'added constraint {constr_name}')
+                            print(f"added constraint {constr_name}")
                     #
                     else:
-                        print (f'info! constraint "{constr_name}" is misconfigured')
+                        print(f'info! constraint "{constr_name}" is misconfigured')
     #
     return None
 
 
-def link_operation(
-        n: pypsa.Network
-    ) -> None:
+def link_operation(n: pypsa.Network) -> None:
     """
-    Link the operation of individual technology options. The following columns 
+    Link the operation of individual technology options. The following columns
     in the individual DataFrames needs to be defined:
         _match_oper_class
         _match_oper_technology, and
@@ -1856,7 +1993,7 @@ def link_operation(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_match_oper_class'
+    col = "_match_oper_class"
     #
     # loop through all components
     for c in comps:
@@ -1868,54 +2005,54 @@ def link_operation(
                     t = t[1]
                 #
                 # if column '-linked_class' is defined prepare adding the constraint
-                if not str(row[col]) in ['', 'nan'] and \
-                    '_match_oper_class' in row and \
-                    '_match_oper_technology' in row and \
-                    '_match_oper_sign' in row and \
-                    '_match_oper_multiplier' in row:
+                if (
+                    str(row[col]) not in ["", "nan"]
+                    and "_match_oper_class" in row
+                    and "_match_oper_technology" in row
+                    and "_match_oper_sign" in row
+                    and "_match_oper_multiplier" in row
+                ):
                     class1 = c
                     tech1 = t
-                    class2 = row['_match_oper_class']
-                    tech2 = row['_match_oper_technology']
-                    sign = row['_match_oper_sign']
-                    factor1 = row['_match_oper_multiplier']
-                    factor2 = 0 # val['_match_oper_rhs']
+                    class2 = row["_match_oper_class"]
+                    tech2 = row["_match_oper_technology"]
+                    sign = row["_match_oper_sign"]
+                    factor1 = row["_match_oper_multiplier"]
+                    factor2 = 0  # val['_match_oper_rhs']
                     #
-                    # validate if the linked technologies do exist    
+                    # validate if the linked technologies do exist
                     valid1 = validate_technology_exists(n, class1, tech1)
                     valid2 = validate_technology_exists(n, class2, tech2)
-                    constr_name = f'Link-operations-{class1}.{tech1}-{class2}.{tech2}'
+                    constr_name = f"Link-operations-{class1}.{tech1}-{class2}.{tech2}"
                     #
                     # if the technology definition is valid, add the constraint
                     if valid1 and valid2:
                         # get the variables
                         op_col1 = comps[class1][0]
                         op_col2 = comps[class2][0]
-                        link1_flow = m.variables[f'{class1}-{op_col1}'].loc[:, tech1]
-                        link2_flow = m.variables[f'{class2}-{op_col2}'].loc[:, tech2]
+                        link1_flow = m.variables[f"{class1}-{op_col1}"].loc[:, tech1]
+                        link2_flow = m.variables[f"{class2}-{op_col2}"].loc[:, tech2]
                         #
                         # add the constraints
                         con = link1_flow - factor1 * link2_flow == factor2
                         con.sign = sign
                         m.add_constraints(con, name=constr_name)
-                        print (f'added constraint {constr_name}')
+                        print(f"added constraint {constr_name}")
                     #
                     else:
-                        print (f'info! constraint "{constr_name}" is misconfigured')
+                        print(f'info! constraint "{constr_name}" is misconfigured')
     #
     return None
 
 
-def limit_hourly_operation_by_capacity(
-        n: pypsa.Network
-    ) -> None:
+def limit_hourly_operation_by_capacity(n: pypsa.Network) -> None:
     """
     Limit the operation of individual technology options based on the capacity
-    of another technology. The following columns in the individual DataFrames 
+    of another technology. The following columns in the individual DataFrames
     needs to be defined:
         _limit_op_class
         _limit_op_technology,
-        _limit_op_sign, and 
+        _limit_op_sign, and
         _limit_op_factor
 
     Parameters
@@ -1930,7 +2067,7 @@ def limit_hourly_operation_by_capacity(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_limit_op_class'
+    col = "_limit_op_class"
     data = []
     #
     # loop through all components
@@ -1941,25 +2078,37 @@ def limit_hourly_operation_by_capacity(
             # loop through all technology options of the class
             for t, row in df.iterrows():
                 # if column '-linked_class' is defined prepare adding the constraint
-                if not str(row[col]) in ['', 'nan'] and \
-                    '_limit_op_class' in row and \
-                    '_limit_op_technology' in row and \
-                    '_limit_op_class' in row and \
-                    '_limit_op_sign' in row and \
-                    '_limit_op_factor' in row:
-                    data.append([
-                        c, 
-                        t, 
-                        df[col].loc[t], 
-                        df['_limit_op_technology'].loc[t],
-                        df['_limit_op_sign'].loc[t],
-                        df['_limit_op_factor'].loc[t]])
+                if (
+                    str(row[col]) not in ["", "nan"]
+                    and "_limit_op_class" in row
+                    and "_limit_op_technology" in row
+                    and "_limit_op_class" in row
+                    and "_limit_op_sign" in row
+                    and "_limit_op_factor" in row
+                ):
+                    data.append(
+                        [
+                            c,
+                            t,
+                            df[col].loc[t],
+                            df["_limit_op_technology"].loc[t],
+                            df["_limit_op_sign"].loc[t],
+                            df["_limit_op_factor"].loc[t],
+                        ]
+                    )
     #
     # convert it into a dataframe
     df = pd.DataFrame(
-        data, 
-        columns=['class', 'technology',
-                 'limit_op_class', 'limit_op_tech', 'limit_op_sign', 'limit_op_factor'])
+        data,
+        columns=[
+            "class",
+            "technology",
+            "limit_op_class",
+            "limit_op_tech",
+            "limit_op_sign",
+            "limit_op_factor",
+        ],
+    )
     #
     # loop through the individual limiting technologies
     i = 0
@@ -1969,48 +2118,51 @@ def limit_hourly_operation_by_capacity(
         rhs = []
         #
         # and collect the once referring to them
-        for _, row in df[(df.limit_op_tech == t) & \
-                         (df.limit_op_class == c)].iterrows():
+        for _, row in df[(df.limit_op_tech == t) & (df.limit_op_class == c)].iterrows():
             # validate the technology option
-            valids.append(validate_technology_exists(n, row['limit_op_class'], row['limit_op_tech']))
-            factor = row['limit_op_factor']
-            col = f'{row['limit_op_class']}-{comps[row['limit_op_class']][0]}'
+            valids.append(
+                validate_technology_exists(
+                    n, row["limit_op_class"], row["limit_op_tech"]
+                )
+            )
+            factor = row["limit_op_factor"]
+            col = f"{row['limit_op_class']}-{comps[row['limit_op_class']][0]}"
             #
             i = i + 1
             if i == 1:
-                rhs = ((factor * m.variables[col].loc[:, row['limit_op_tech']]))
+                rhs = factor * m.variables[col].loc[:, row["limit_op_tech"]]
             #
             else:
-                rhs = rhs + ((factor * m.variables[col].loc[:, row['limit_op_tech']]))
+                rhs = rhs + (factor * m.variables[col].loc[:, row["limit_op_tech"]])
         #
         # Get the hourly link flow variables for all technologies across all snapshots
-        constr_name = f'Limit-operations-by-capacity-{c}_{t}'
+        constr_name = f"Limit-operations-by-capacity-{c}_{t}"
         #
         if all(valids):
             # collect details to limit the sum for each time step
             nom_col = comps[c]
             #
-            link_cap = m.variables[f'{c}-{nom_col}'].loc[t]
+            link_cap = m.variables[f"{c}-{nom_col}"].loc[t]
             #
             # add the constraint
             con = rhs <= link_cap
             con.sign = row.limit_op_sign
             m.add_constraints(con, name=constr_name)
-            print (f'added constraint {constr_name}')
+            print(f"added constraint {constr_name}")
         #
         else:
-            print (f'info! constraint "{constr_name}" is misconfigured')
+            print(f'info! constraint "{constr_name}" is misconfigured')
     #
     return None
 
 
 def minimum_load_if_operates(
-        n: pypsa.Network,
-        bigM: float = 1e8,
-    ) -> None:
+    n: pypsa.Network,
+    bigM: float = 1e8,
+) -> None:
     """
     Adds constraints to define a min_pu level if in operation. Currently
-    necessary for expandable technology options. The following column in the 
+    necessary for expandable technology options. The following column in the
     individual DataFrames needs to be defined:
         _min_pu_if_in_op
 
@@ -2030,21 +2182,19 @@ def minimum_load_if_operates(
     m = n.model
     # defines the variables and constraints only for the required technology options
     comps = pypsa.descriptors.nominal_attrs
-    col = '_min_pu_if_in_op'
+    col = "_min_pu_if_in_op"
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
-        if (len(df) > 0) and \
-           (col in df.columns):
-            for t in df.query(f'{col} > 0.0').index:
+        if (len(df) > 0) and (col in df.columns):
+            for t in df.query(f"{col} > 0.0").index:
                 # create the binary status variable
-                var_name = f'{c}-{t}-hourly-opstatus'
+                var_name = f"{c}-{t}-hourly-opstatus"
                 if var_name not in m.variables:
-                    status = m.add_variables (
-                        name=var_name, 
-                        binary=True,
-                        coords=[n.snapshots])
+                    status = m.add_variables(
+                        name=var_name, binary=True, coords=[n.snapshots]
+                    )
                 #
                 else:
                     status = m.variables[var_name]
@@ -2052,24 +2202,23 @@ def minimum_load_if_operates(
                 # get the variables
                 op_col = comps[c][0]
                 attr = comps[c]
-                dispatch = m.variables[f'{c}-{op_col}'].loc[:, t]
-                capacity = m.variables[f'{c}-{attr}'].loc[t]
+                dispatch = m.variables[f"{c}-{op_col}"].loc[:, t]
+                capacity = m.variables[f"{c}-{attr}"].loc[t]
                 min_pu = df[col].loc[t]
                 #
                 # add the constraints
-                constr_name = f'{c}-{t}-min_load_if_in_operation'
+                constr_name = f"{c}-{t}-min_load_if_in_operation"
                 if constr_name not in m.constraints:
                     m.add_constraints(
                         dispatch >= min_pu * capacity - bigM * (1 - status),
-                        name=constr_name)
-                    print (f'added constraint {constr_name}')
+                        name=constr_name,
+                    )
+                    print(f"added constraint {constr_name}")
                 #
-                constr_name = f'{c}-{t}-is_online_if_in_operation'
+                constr_name = f"{c}-{t}-is_online_if_in_operation"
                 if constr_name not in m.constraints:
-                    m.add_constraints(
-                        dispatch <= bigM * status,
-                        name=constr_name)
-                    print (f'added constraint {constr_name}')
+                    m.add_constraints(dispatch <= bigM * status, name=constr_name)
+                    print(f"added constraint {constr_name}")
                 #
                 # adjust the objective function
                 m.objective -= 1.0 * status.sum()
@@ -2078,12 +2227,12 @@ def minimum_load_if_operates(
 
 
 def invest_if_installed(
-        n: pypsa.Network,
-        bigM: float = 1e8,
-    ) -> None:
+    n: pypsa.Network,
+    bigM: float = 1e8,
+) -> None:
     """
     Adds constraints to add a specific cost if a specific technology options is
-    being installed. The following column in the individual DataFrames needs 
+    being installed. The following column in the individual DataFrames needs
     to be defined:
         _capital_cost_if_inst
 
@@ -2102,43 +2251,45 @@ def invest_if_installed(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_capital_cost_if_inst'
+    col = "_capital_cost_if_inst"
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
-        if (len(df) > 0) and \
-           (col in df.columns):
-            for t in df.query(f'{col} > 0.0').index.get_level_values('name').unique():
+        if (len(df) > 0) and (col in df.columns):
+            for t in df.query(f"{col} > 0.0").index.get_level_values("name").unique():
                 # create the binary status variable
-                var_name = f'{c}-{t}-installed'
+                var_name = f"{c}-{t}-installed"
                 if var_name not in m.variables:
-                    idx = df[df.index.get_level_values('name') == t].index.get_level_values('name').unique()
+                    idx = (
+                        df[df.index.get_level_values("name") == t]
+                        .index.get_level_values("name")
+                        .unique()
+                    )
                     is_installed = m.add_variables(
-                        name=var_name, 
-                        binary=True, 
+                        name=var_name,
+                        binary=True,
                         # coords=[df.query(f'name == "{t}"').index])
-                        coords=[idx])
+                        coords=[idx],
+                    )
                 #
                 else:
                     is_installed = m.variables[var_name]
                 #
                 # get the variables
                 nom_col = comps[c]
-                link_cap = m.variables[f'{c}-{nom_col}'].loc[t]
+                link_cap = m.variables[f"{c}-{nom_col}"].loc[t]
                 #
                 if n.has_scenarios:
-                    invest = df[df.index.get_level_values('name') == t][col]
+                    invest = df[df.index.get_level_values("name") == t][col]
                 else:
                     invest = df[col][t]
                 #
                 # add the constraints
-                constr_name = f'{c}-{t}-is_not_installed'
+                constr_name = f"{c}-{t}-is_not_installed"
                 if constr_name not in m.constraints:
-                    m.add_constraints(
-                        link_cap <= bigM * is_installed,
-                        name=constr_name)
-                    print (f'added constraint {constr_name}')
+                    m.add_constraints(link_cap <= bigM * is_installed, name=constr_name)
+                    print(f"added constraint {constr_name}")
                 #
                 # adjust the objective function
                 m.objective += invest * is_installed.sum()
@@ -2147,12 +2298,12 @@ def invest_if_installed(
 
 
 def min_capacity_if_installed(
-        n: pypsa.Network,
-        bigM: float = 1e8,
-    ) -> None:
+    n: pypsa.Network,
+    bigM: float = 1e8,
+) -> None:
     """
     Adds constraints to limit the expansion of technology options to a minimum
-    if it is installed. The following column in the individual DataFrames needs 
+    if it is installed. The following column in the individual DataFrames needs
     to be defined:
         _nom_min_if_inst
 
@@ -2170,58 +2321,61 @@ def min_capacity_if_installed(
     """
     #
     m = n.model
-    col = '_nom_min_if_inst'
+    col = "_nom_min_if_inst"
     comps = pypsa.descriptors.nominal_attrs
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
-        if (len(df) > 0) and \
-           (col in df.columns):
-            for t in df.query(f'{col} > 0.0').index.get_level_values('name').unique():
+        if (len(df) > 0) and (col in df.columns):
+            for t in df.query(f"{col} > 0.0").index.get_level_values("name").unique():
                 # create the binary status variable
-                var_name = f'{c}-{t}-installed'
+                var_name = f"{c}-{t}-installed"
                 if var_name not in m.variables:
-                    idx = df[df.index.get_level_values('name') == t].index.get_level_values('name').unique()
+                    idx = (
+                        df[df.index.get_level_values("name") == t]
+                        .index.get_level_values("name")
+                        .unique()
+                    )
                     is_installed = m.add_variables(
-                        name=var_name, binary=True, 
+                        name=var_name,
+                        binary=True,
                         # coords=[df.query(f'name == "{t}"').index])
-                        coords=[idx])
+                        coords=[idx],
+                    )
                 #
                 else:
                     is_installed = m.variables[var_name]
                 #
                 # get the variables
                 attr = comps[c]
-                link_cap = m.variables[f'{c}-{attr}'].loc[t]
-                min_cap = df[df.index.get_level_values('name') == t][col].unique()
+                link_cap = m.variables[f"{c}-{attr}"].loc[t]
+                min_cap = df[df.index.get_level_values("name") == t][col].unique()
                 #
                 # add the constraints
-                constr_name = f'{c}-min_capacity_if_installed-{t}'
+                constr_name = f"{c}-min_capacity_if_installed-{t}"
                 if constr_name not in m.constraints:
                     m.add_constraints(
-                        link_cap >= min_cap * is_installed,
-                        name=constr_name)
-                    print (f'added constraint {constr_name}')
+                        link_cap >= min_cap * is_installed, name=constr_name
+                    )
+                    print(f"added constraint {constr_name}")
                 #
-                constr_name = f'{c}-is_not_installed-{t}'
+                constr_name = f"{c}-is_not_installed-{t}"
                 if constr_name not in m.constraints:
-                    m.add_constraints(
-                        link_cap <= bigM * is_installed,
-                        name=constr_name)
-                    print (f'added constraint {constr_name}')
+                    m.add_constraints(link_cap <= bigM * is_installed, name=constr_name)
+                    print(f"added constraint {constr_name}")
     #
     return None
 
 
 def background_marginal_cost(
-        n: pypsa.Network,
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
-    Adds constraints to consider marignal cost in the objective function 
+    Adds constraints to consider marignal cost in the objective function
     without having real marginal costs to be considered. This can be used to
     minimize charging and discharging of power at the same time to destroy
-    energy instead of curtailing it. The following column in the individual 
+    energy instead of curtailing it. The following column in the individual
     DataFrames needs to be defined:
         _bg_marginal_cost
 
@@ -2237,38 +2391,40 @@ def background_marginal_cost(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_bg_marginal_cost'
+    col = "_bg_marginal_cost"
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
-        if (len(df) > 0) and \
-           (col in df.columns):
-            for t in df.query(f'{col} > 0.0').index.get_level_values('name').unique():
+        if (len(df) > 0) and (col in df.columns):
+            for t in df.query(f"{col} > 0.0").index.get_level_values("name").unique():
                 # get the operational variable
-                if c == 'StorageUnit':
-                    op_col = f'{comps[c][0]}_store'
+                if c == "StorageUnit":
+                    op_col = f"{comps[c][0]}_store"
                 #
                 else:
                     op_col = comps[c][0]
                 #
                 if n.has_scenarios:
-                    tech_flow = m.variables[f'{c}-{op_col}'].loc[:, t]
+                    tech_flow = m.variables[f"{c}-{op_col}"].loc[:, t]
                     # adjust the objective function
-                    m.objective += tech_flow.sum() * df[df.index.get_level_values('name') == t][col]
+                    m.objective += (
+                        tech_flow.sum()
+                        * df[df.index.get_level_values("name") == t][col]
+                    )
                 else:
-                    tech_flow = m.variables[f'{c}-{op_col}'].loc[:, t]
+                    tech_flow = m.variables[f"{c}-{op_col}"].loc[:, t]
                     # adjust the objective function
                     m.objective += tech_flow.sum() * df[col][t]
                 #
-                print (f'added constraint {c}.{t}.{col}')
+                print(f"added constraint {c}.{t}.{col}")
     #
     return None
 
 
 def shared_technology_potential(
-        n: pypsa.Network,
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
     Limit the capacity additions for a group of technologies.
     Useful if e.g. several WT's are allowed to be built but constraint by space.
@@ -2287,19 +2443,18 @@ def shared_technology_potential(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_shared_potential'
+    col = "_shared_potential"
     df_list = []
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
-        if (not df.empty) and \
-           (col in df.columns):
+        if (not df.empty) and (col in df.columns):
             attr = comps[c]
             df[col] = df[col].astype(str)
-            df_copy = df[(df[col] > '') & (df[col] != 'nan')].copy()
-            df_copy['technology_type'] = c
-            df_list.append(df_copy[['technology_type', col, attr+'_max']])
+            df_copy = df[(df[col] > "") & (df[col] != "nan")].copy()
+            df_copy["technology_type"] = c
+            df_list.append(df_copy[["technology_type", col, attr + "_max"]])
     #
     df_concat = pd.concat(df_list, sort=False)
     #
@@ -2312,33 +2467,31 @@ def shared_technology_potential(
             # combine them into a constraint
             attr = comps[c[1].technology_type]
             index = c[0]
-            link_cap = m.variables[f'{c[1].technology_type}-{attr}'].loc[index]
-            max_cap = df_concat[attr+'_max'][index]
+            link_cap = m.variables[f"{c[1].technology_type}-{attr}"].loc[index]
+            max_cap = df_concat[attr + "_max"][index]
             #
             if max_cap > 0:
                 # link1_cap = m.variables[f'{class1}-{nom_col1}'].loc[tech1]
                 con = con + link_cap / max_cap
             #
             else:
-                print (f'warning! technology {index} needs to define its {attr}')
+                print(f"warning! technology {index} needs to define its {attr}")
         #
-        if type(con) == linopy.expressions.LinearExpression:
-            constr_name = f'Shared-potential-{t}'
-            m.add_constraints(
-                con <= 1,
-                name=constr_name)
-            print (f'added constraint {constr_name}')
+        if type(con) is linopy.expressions.LinearExpression:
+            constr_name = f"Shared-potential-{t}"
+            m.add_constraints(con <= 1, name=constr_name)
+            print(f"added constraint {constr_name}")
         else:
-            print (f'info! nothing to do: {con}, {t}')
+            print(f"info! nothing to do: {con}, {t}")
     #
     return None
 
 
 def force_technology_capacity(
-        n: pypsa.Network,
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
-    Force the capacity additions of a group of components to be <=, =, or >= of 
+    Force the capacity additions of a group of components to be <=, =, or >= of
     a given constraint.
     The following column in the individual DataFrames needs to be defined:
         _limit_cap_string
@@ -2357,28 +2510,28 @@ def force_technology_capacity(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_limit_cap_string'
+    col = "_limit_cap_string"
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
         #
         if col in df.columns:
-            if df[df[col].fillna('') > ''][col].unique().any():
-                for tech in df[df[col] > ''][col].unique():
-                    constr_name = f'Force-capacity-{tech}'
+            if df[df[col].fillna("") > ""][col].unique().any():
+                for tech in df[df[col] > ""][col].unique():
+                    constr_name = f"Force-capacity-{tech}"
                     con = 0
                     cap = 0
                     #
                     # loop through all technology options of the individual class
                     for t, row in df[df[col] == tech].iterrows():
-                        sign = row['_limit_cap_sign']
-                        cap = row['_limit_cap']
+                        sign = row["_limit_cap_sign"]
+                        cap = row["_limit_cap"]
                         #
                         # get capacity variable
                         nom_col = comps[c]
                         #
-                        link_cap = m.variables[f'{c}-{nom_col}'].loc[t]
+                        link_cap = m.variables[f"{c}-{nom_col}"].loc[t]
                         #
                         con += link_cap
                     #
@@ -2387,14 +2540,14 @@ def force_technology_capacity(
                     #
                     # add the constraints
                     m.add_constraints(con2, name=constr_name)
-                    print (f'added constraint {constr_name}')
+                    print(f"added constraint {constr_name}")
     #
     return None
 
 
 def mga_settings(
-        n: pypsa.Network, 
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
     Adds a constrain for the MGA approach.
 
@@ -2414,31 +2567,33 @@ def mga_settings(
         raise ValueError(msg)
     #
     # optimal_cost and fixed_cost is taken from the first run
-    optimal_cost = globals()['optimal_cost']
-    fixed_cost = globals()['fixed_cost']
+    optimal_cost = globals()["optimal_cost"]
+    fixed_cost = globals()["fixed_cost"]
     #
     objective = m.objective
-    if not isinstance(objective, (linopy.LinearExpression | linopy.QuadraticExpression)):
+    if not isinstance(
+        objective, (linopy.LinearExpression | linopy.QuadraticExpression)
+    ):
         objective = objective.expression
     #
-    if 'mga_slack' in globals():
-        slack = globals()['mga_slack']
+    if "mga_slack" in globals():
+        slack = globals()["mga_slack"]
     #
     else:
         slack = 0.01
     #
-    constr_name = 'MGA-budget-constraint'
+    constr_name = "MGA-budget-constraint"
     m.add_constraints(
-        objective + fixed_cost >= (1 + slack) * optimal_cost,
-        name=constr_name)
-    print (f'added constraint {constr_name}')
+        objective + fixed_cost >= (1 + slack) * optimal_cost, name=constr_name
+    )
+    print(f"added constraint {constr_name}")
     #
     return None
 
 
 def reserve_constraints(
-        n: pypsa.Network, 
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
     Adds constraints for reserve margin consideration.
     The following column in the individual DataFrames needs to be defined:
@@ -2454,7 +2609,7 @@ def reserve_constraints(
     None
     """
     #
-    print ('fct reserve_constraints not active yet!')
+    print("fct reserve_constraints not active yet!")
     #
     return True
     #
@@ -2466,65 +2621,69 @@ def reserve_constraints(
     # x) reserve at least the size of the largest unit being built or is built
     #
     m = n.model
-    col = '_rm_participation'
+    col = "_rm_participation"
     comps = pypsa.descriptors.nominal_attrs
     #
     # reserve_req >= Fa * ( ( Fb * load + Fc**2 )**(Fd) ) - Fe
-    Fa = globals()['rm_factor_a'] # 1
-    Fb = globals()['rm_factor_b'] # 0.15
-    Fc = globals()['rm_factor_c'] # 0
-    Fd = globals()['rm_factor_d'] # 1
-    Fe = globals()['rm_factor_e'] # 0
+    Fa = globals()["rm_factor_a"]  # 1
+    Fb = globals()["rm_factor_b"]  # 0.15
+    Fc = globals()["rm_factor_c"]  # 0
+    Fd = globals()["rm_factor_d"]  # 1
+    Fe = globals()["rm_factor_e"]  # 0
     #
     # loop through all components
-    for c in ['Generator']: # comps:
+    for c in ["Generator"]:  # comps:
         df = n.c[c].static
         if col in df.columns:
             #
             # create the binary status variable
-            var_name = f'{c}-p_reserve_up'
+            var_name = f"{c}-p_reserve_up"
             if var_name not in m.variables:
                 v_rp = m.add_variables(
-                    lower=0,
-                    name=var_name, 
-                    coords=[n.snapshots, df.index])
+                    lower=0, name=var_name, coords=[n.snapshots, df.index]
+                )
             #
             else:
                 v_rp = m.variables[var_name]
             #
             # get the variables
             attr = comps[c]
-            link_cap = m.variables[f'{c}-{attr}']
+            link_cap = m.variables[f"{c}-{attr}"]
             # dispatch = m.variables[f'{c}-{attr[0]}']
             # reserve = m.variables[var_name]
             #
-            rm_class = globals()['rm_load_class']
-            rm_tech = globals()['rm_load_name']
-            load = n.c[rm_class].static[attr[0]+'_set'][rm_tech]
+            rm_class = globals()["rm_load_class"]
+            rm_tech = globals()["rm_load_name"]
+            load = n.c[rm_class].static[attr[0] + "_set"][rm_tech]
             #
             # add the constraints
-            constr_name = 'Global-hourly_reserve_requirement-equation'
+            constr_name = "Global-hourly_reserve_requirement-equation"
             m.add_constraints(
-                v_rp.sum('name') >= Fa * ( ( Fb * load + Fc**2 )**(Fd) ) - Fe, 
-                name=constr_name)
-            #
-            constr_name = f'{c}-reserve_up-limit-available_capacity'
-            m.add_constraints(
-                link_cap - m.variables[f'{var_name}'] - m.variables[f'{c}-{attr[0]}'] >= 0, 
+                v_rp.sum("name") >= Fa * ((Fb * load + Fc**2) ** (Fd)) - Fe,
                 name=constr_name,
-                coords=[n.snapshots, df.index])
+            )
             #
-            constr_name = f'{c}-reserve_up-limit-min_pu'
+            constr_name = f"{c}-reserve_up-limit-available_capacity"
             m.add_constraints(
-                v_rp <= df[col] * (1 - df[attr[0]+'_min_pu']) * link_cap, 
+                link_cap - m.variables[f"{var_name}"] - m.variables[f"{c}-{attr[0]}"]
+                >= 0,
                 name=constr_name,
-                coords=[n.snapshots, df.index])
+                coords=[n.snapshots, df.index],
+            )
             #
-            constr_name = f'{c}-reserve_up-limit-ramp_up'
+            constr_name = f"{c}-reserve_up-limit-min_pu"
             m.add_constraints(
-                v_rp <= df[col] * df['ramp_limit_up'].fillna(1) * link_cap, 
+                v_rp <= df[col] * (1 - df[attr[0] + "_min_pu"]) * link_cap,
                 name=constr_name,
-                coords=[n.snapshots, df.index])
+                coords=[n.snapshots, df.index],
+            )
+            #
+            constr_name = f"{c}-reserve_up-limit-ramp_up"
+            m.add_constraints(
+                v_rp <= df[col] * df["ramp_limit_up"].fillna(1) * link_cap,
+                name=constr_name,
+                coords=[n.snapshots, df.index],
+            )
             #
             """
             if eval(globals()['rm_max_generator']):
@@ -2537,16 +2696,16 @@ def reserve_constraints(
             """
             #
             # add cost to the objective function
-            tech_flow = m.variables[f'{var_name}']
+            tech_flow = m.variables[f"{var_name}"]
             m.objective += (tech_flow * n.c[c].static.marginal_cost).sum()
     #
     return None
 
 
 def limit_operation_of_emergency_technology(
-        n: pypsa.Network,
-        bigM: float = 1e8,
-    ) -> None:
+    n: pypsa.Network,
+    bigM: float = 1e8,
+) -> None:
     """
     Limit the operation of emergency operators (in hours per year).
 
@@ -2564,7 +2723,7 @@ def limit_operation_of_emergency_technology(
     """
     #
     m = n.model
-    col = '_max_op_hours'
+    col = "_max_op_hours"
     comps = pypsa.descriptors.nominal_attrs
     #
     # loop through all components
@@ -2573,47 +2732,44 @@ def limit_operation_of_emergency_technology(
         #
         if col in df.columns:
             for t, row in df[df[col] > 0].iterrows():
-          		# the scenario name comes before the technology name
+                # the scenario name comes before the technology name
                 if n.has_scenarios:
                     t = t[1]
                 #
                 # create the binary status variable
-                var_name = f'{c}-{t}-hourly-opstatus'
+                var_name = f"{c}-{t}-hourly-opstatus"
                 if var_name not in m.variables:
-                    status = m.add_variables (
-                        name=var_name, 
-                        binary=True,
-                        coords=[n.snapshots])
+                    status = m.add_variables(
+                        name=var_name, binary=True, coords=[n.snapshots]
+                    )
                 #
                 else:
                     status = m.variables[var_name]
                 #
                 # get the variables
                 op_col = comps[c][0]
-                dispatch = m.variables[f'{c}-{op_col}'].loc[:, t]
+                dispatch = m.variables[f"{c}-{op_col}"].loc[:, t]
                 #
-                constr_name = f'{c}-{t}-is_online_if_in_operation'
+                constr_name = f"{c}-{t}-is_online_if_in_operation"
                 if constr_name not in m.constraints:
-                    m.add_constraints(
-                        dispatch <= bigM * status,
-                        name=constr_name)
+                    m.add_constraints(dispatch <= bigM * status, name=constr_name)
                 #
                 # loop through available years
                 for y in n.snapshots.to_frame().period.unique():
-                    constr_name = f'{c}-{t}-limit_hours_of_op-{y}'
+                    constr_name = f"{c}-{t}-limit_hours_of_op-{y}"
                     if constr_name not in m.constraints:
                         m.add_constraints(
-                            status.loc[y].sum() <= float(row[col]),
-                            name=constr_name)
-                        print (f'added {constr_name}')
+                            status.loc[y].sum() <= float(row[col]), name=constr_name
+                        )
+                        print(f"added {constr_name}")
     #
     return None
 
 
 def strict_unsimultaneous_charging_discharging(
-        n: pypsa.Network, 
-        bigM: float = 1e8,
-    ) -> None:
+    n: pypsa.Network,
+    bigM: float = 1e8,
+) -> None:
     """
     Adds constraints for a strict enforced unsimultaneous charging and discharging.
     The following column in the individual DataFrames needs to be defined:
@@ -2634,19 +2790,18 @@ def strict_unsimultaneous_charging_discharging(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_strict_binary_op'
+    col = "_strict_binary_op"
     df_list = []
     #
     # loop through all components
-    for c in ['Link']: # comps:
+    for c in ["Link"]:  # comps:
         df = n.c[c].static
         #
-        if (not df.empty) and \
-           (col in df.columns):
+        if (not df.empty) and (col in df.columns):
             df[col] = df[col].astype(str)
-            df_copy = df[(df[col] > '') & (df[col] != 'nan')].copy()
-            df_copy['technology_type'] = c
-            df_list.append(df_copy[['technology_type', col]])
+            df_copy = df[(df[col] > "") & (df[col] != "nan")].copy()
+            df_copy["technology_type"] = c
+            df_list.append(df_copy[["technology_type", col]])
     #
     df_concat = pd.concat(df_list, sort=False)
     #
@@ -2654,7 +2809,9 @@ def strict_unsimultaneous_charging_discharging(
     for idx in df_concat.groupby(col, axis=0).count().iterrows():
         # valid configurations have two entries
         if idx[1][0] != 2:
-            print (f'warning! configuration of strict binary operation {idx[0]} is not correct')
+            print(
+                f"warning! configuration of strict binary operation {idx[0]} is not correct"
+            )
             pass
         #
         else:
@@ -2678,51 +2835,49 @@ def strict_unsimultaneous_charging_discharging(
             attr1 = comps[c1]
             attr2 = comps[c2]
             #
-            charge_p = m.variables[f'{c1}-{attr1[0]}'].loc[:, f'{t1}']
-            discharge_p = m.variables[f'{c2}-{attr2[0]}'].loc[:, f'{t2}']
+            charge_p = m.variables[f"{c1}-{attr1[0]}"].loc[:, f"{t1}"]
+            discharge_p = m.variables[f"{c2}-{attr2[0]}"].loc[:, f"{t2}"]
             #
-            var_name = f'{str_idx}-operation1_bin'
+            var_name = f"{str_idx}-operation1_bin"
             if var_name not in m.variables:
                 bin_var = m.add_variables(
-                    binary = True, 
-                    dims = ['snapshot'], 
-                    coords = {'snapshot': n.snapshots}, 
-                    name = var_name)
+                    binary=True,
+                    dims=["snapshot"],
+                    coords={"snapshot": n.snapshots},
+                    name=var_name,
+                )
             #
             else:
                 bin_var = m.variables[var_name]
             #
-            var_name = f'{str_idx}-operation2_bin'
+            var_name = f"{str_idx}-operation2_bin"
             if var_name not in m.variables:
                 one = m.add_variables(
-                    lower = 1.0, 
-                    upper = 1.0, 
-                    dims = ['snapshot'], 
-                    coords = {'snapshot': n.snapshots}, 
-                    name = var_name)
+                    lower=1.0,
+                    upper=1.0,
+                    dims=["snapshot"],
+                    coords={"snapshot": n.snapshots},
+                    name=var_name,
+                )
             #
             else:
                 one = m.variables[var_name]
             #
-            constr_name = f'{str_idx}-strict-on-charge'
-            m.add_constraints(
-                charge_p <= bigM * bin_var, 
-                name = constr_name)
-            print (f'added constraint {constr_name}')
-            constr_name = f'{str_idx}-strict-on-discharge'
-            m.add_constraints(
-                discharge_p <= bigM * (one - bin_var), 
-                name = constr_name)
-            print (f'added constraint {constr_name}')
+            constr_name = f"{str_idx}-strict-on-charge"
+            m.add_constraints(charge_p <= bigM * bin_var, name=constr_name)
+            print(f"added constraint {constr_name}")
+            constr_name = f"{str_idx}-strict-on-discharge"
+            m.add_constraints(discharge_p <= bigM * (one - bin_var), name=constr_name)
+            print(f"added constraint {constr_name}")
     #
     return None
 
 
 def remove_KVL_constraints(
-        n: pypsa.Network, 
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
-    Remmoves the Kirchhoff-Voltage-Law constrains. As a result does ignore AC 
+    Remmoves the Kirchhoff-Voltage-Law constrains. As a result does ignore AC
     and DC settings.
 
     Parameters
@@ -2736,17 +2891,17 @@ def remove_KVL_constraints(
     """
     #
     m = n.model
-    constr_name = 'Kirchhoff-Voltage-Law'
+    constr_name = "Kirchhoff-Voltage-Law"
     if constr_name in m.constraints:
         m.remove_constraints(constr_name)
-        print (f'removed {constr_name}')
+        print(f"removed {constr_name}")
     #
     return None
 
 
 def consider_retirement_gains(
-        n: pypsa.Network, 
-    ) -> None:
+    n: pypsa.Network,
+) -> None:
     """
     Cost reduction by unused equipment. Very simple implementation for now.
     The following column in the individual DataFrames needs to be defined:
@@ -2764,53 +2919,57 @@ def consider_retirement_gains(
     #
     m = n.model
     comps = pypsa.descriptors.nominal_attrs
-    col = '_retirement_gain'
+    col = "_retirement_gain"
     #
     # loop through all components
     for c in comps:
         df = n.c[c].static
         attr = comps[c]
         #
-        if (f'{c}-{attr}' in m.variables) and \
-           (col in df.columns):
+        if (f"{c}-{attr}" in m.variables) and (col in df.columns):
             # only take the candidates where changes are allowed based on the
             # provided data (p_nom, p_nom_min, and p_nom_max are not equal)
-            dfs = df[(df[f'{attr}'] !=  df[f'{attr}_min']) & \
-                     (df[f'{attr}'] !=  df[f'{attr}_max'])]
+            dfs = df[
+                (df[f"{attr}"] != df[f"{attr}_min"])
+                & (df[f"{attr}"] != df[f"{attr}_max"])
+            ]
             #
             if len(dfs) > 0:
-                final_cap = m.variables[f'{c}-{attr}'].loc[dfs.index.get_level_values('name').unique()]
+                final_cap = m.variables[f"{c}-{attr}"].loc[
+                    dfs.index.get_level_values("name").unique()
+                ]
                 initial_cap = dfs[attr].unique()
-                minimum_cap = dfs[f'{attr}_min'].unique()
+                minimum_cap = dfs[f"{attr}_min"].unique()
                 retirement_cost = dfs[col].unique()
                 #
                 if retirement_cost.sum() > 0:
                     # add variable to decide if retirement tool place
-                    var_name = f'{c}-retirement'
+                    var_name = f"{c}-retirement"
                     if var_name not in m.variables:
                         retired = m.add_variables(
-                            # lower=0, 
-                            coords=[dfs.index.get_level_values('name').unique()],
-                            name=var_name)
+                            # lower=0,
+                            coords=[dfs.index.get_level_values("name").unique()],
+                            name=var_name,
+                        )
                     #
                     else:
                         retired = m.variables[var_name]
                     #
                     # add constraint to consider potential retirement
-                    constr_name = f'{c}-retirement-limit1'
+                    constr_name = f"{c}-retirement-limit1"
                     if constr_name not in m.constraints:
                         m.add_constraints(
-                            retired >= initial_cap - final_cap,
-                            name=constr_name)
-                        print (f'added {constr_name}')
+                            retired >= initial_cap - final_cap, name=constr_name
+                        )
+                        print(f"added {constr_name}")
                     #
                     # add constraint to consider potential retirement
-                    constr_name = f'{c}-retirement-limit2'
+                    constr_name = f"{c}-retirement-limit2"
                     if constr_name not in m.constraints:
                         m.add_constraints(
-                            final_cap - minimum_cap >= 0,
-                            name=constr_name)
-                        print (f'added {constr_name}')
+                            final_cap - minimum_cap >= 0, name=constr_name
+                        )
+                        print(f"added {constr_name}")
                     #
                     # adjust the objectiv function
                     m.objective += retirement_cost * retired
@@ -2819,9 +2978,9 @@ def consider_retirement_gains(
 
 
 def add_maintenance_constraints(
-        n: pypsa.Network, 
-        method: str = "monthly",
-    ) -> None:
+    n: pypsa.Network,
+    method: str = "monthly",
+) -> None:
     """
     Optimize maintenance start.
     The following column in the individual DataFrames needs to be defined:
@@ -2841,7 +3000,7 @@ def add_maintenance_constraints(
     m = n.model
     sns = n.snapshots
     comps = pypsa.descriptors.nominal_attrs
-    col = '_opt_maint'
+    col = "_opt_maint"
     #
     for c in comps:
         if col in n.c[c].static.columns:
@@ -2863,34 +3022,34 @@ def add_maintenance_constraints(
             #
             # Binary maintenance start variable
             m.add_variables(
-                binary=True,
-                coords=[start_times, techs],
-                name=f'{c}-maintenance_start')
+                binary=True, coords=[start_times, techs], name=f"{c}-maintenance_start"
+            )
             #
-            z = m[f'{c}-maintenance_start']
-            constr_name = f'{c}-one_maintenance_per_option'
-            m.add_constraints(
-                z.sum(dim="snapshot") == 1, name=constr_name)
+            z = m[f"{c}-maintenance_start"]
+            constr_name = f"{c}-one_maintenance_per_option"
+            m.add_constraints(z.sum(dim="snapshot") == 1, name=constr_name)
             #
             for t in techs:
                 for t_start in start_times:
                     idx_start = sns.get_loc(t_start)
-                    affected = sns[idx_start: idx_start + n.c[c].static.at[t, '_maint_duration']]
+                    affected = sns[
+                        idx_start : idx_start + n.c[c].static.at[t, "_maint_duration"]
+                    ]
                     #
                     if len(affected) > 0:
-                        constr_name = f'{c}-{t}-maintenance_off_{str(t_start).replace("-","")[0:8]}'
+                        constr_name = f"{c}-{t}-maintenance_off_{str(t_start).replace('-', '')[0:8]}"
                         m.add_constraints(
-                            n.model[f'{c}-{attr[0]}'].loc[affected, t]
-                                <= n.c[c].static.at[t, attr] * (1 - z.loc[t_start, t]),
-                            name=constr_name)
+                            n.model[f"{c}-{attr[0]}"].loc[affected, t]
+                            <= n.c[c].static.at[t, attr] * (1 - z.loc[t_start, t]),
+                            name=constr_name,
+                        )
     #
     return None
 
 
 def extra_functionalities(
-        n: pypsa.Network, 
-        snapshots: pd.core.indexes.datetimes.DatetimeIndex
-    ) -> None:
+    n: pypsa.Network, snapshots: pd.core.indexes.datetimes.DatetimeIndex
+) -> None:
     """
     Adds extra functionalities into the PyPSA model above the features provided
     out of the shelf.
@@ -2909,55 +3068,54 @@ def extra_functionalities(
     """
     #
     # LP functionalities
-    print ('add LP constraints if/as needed ...')
+    print("add LP constraints if/as needed ...")
     #
-    if eval(globals()['remove_kvl_constraints']):
+    if eval(globals()["remove_kvl_constraints"]):
         remove_KVL_constraints(n)
     #
     background_marginal_cost(n)
     #
-    if eval(globals()['do_operational_constraints']):
+    if eval(globals()["do_operational_constraints"]):
         link_operation(n)
         limit_hourly_operation_by_capacity(n)
     #
-    if eval(globals()['do_investment_constraints']):
+    if eval(globals()["do_investment_constraints"]):
         link_capacities(n)
         shared_technology_potential(n)
         force_technology_capacity(n)
         consider_retirement_gains(n)
         #
-        if eval(globals()['rm_activate']):
+        if eval(globals()["rm_activate"]):
             if not n.has_scenarios:
                 reserve_constraints(n)
     #
-    if (eval(globals()['run_mga_runs'])) and \
-       (globals()['mga_slack'] > 0):
+    if (eval(globals()["run_mga_runs"])) and (globals()["mga_slack"] > 0):
         mga_settings(n)
     #
     # MILP functionalities
-    if eval(globals()['do_milp_constraints']):
-        print ('add MILP constraints if/as needed ...\n')
+    if eval(globals()["do_milp_constraints"]):
+        print("add MILP constraints if/as needed ...\n")
         #
-        if eval(globals()['do_strict_unsimultaneous_dis+charging']):
+        if eval(globals()["do_strict_unsimultaneous_dis+charging"]):
             strict_unsimultaneous_charging_discharging(n)
         #
-        if eval(globals()['do_operational_constraints']):
+        if eval(globals()["do_operational_constraints"]):
             minimum_load_if_operates(n)
             limit_operation_of_emergency_technology(n)
         #
-        if eval(globals()['do_investment_constraints']):
+        if eval(globals()["do_investment_constraints"]):
             invest_if_installed(n)
             min_capacity_if_installed(n)
         #
-        if eval(globals()['do_maintenance_planing']):
-            add_maintenance_constraints(n, globals()['maintenance_mode'])
+        if eval(globals()["do_maintenance_planing"]):
+            add_maintenance_constraints(n, globals()["maintenance_mode"])
     #
     return None
 
 
 def check_oetc_usage(
-        kwargs: dict,
-    ) -> dict:
+    kwargs: dict,
+) -> dict:
     """
     Check if OETC should be used.
 
@@ -2965,53 +3123,53 @@ def check_oetc_usage(
     ----------
     kwargs: dict
         Dictionary of keyword arguments.
-    
+
     Returns
     -------
     kwargs: dict
         Dictionary of keyword arguments.
     """
     #
-    if eval(globals()['use_oetc']):
+    if eval(globals()["use_oetc"]):
         try:
-            print ('info! try to initiate OETC ...')
-            globals()['solver_name'] = 'gurobi'
+            print("info! try to initiate OETC ...")
+            globals()["solver_name"] = "gurobi"
             # set OETC settings
             rndStr = random_string(6)
             oetc = {}
-            oetc['name'] = f'PyPSA-X-{rndStr}'
-            oetc['authentication_server_url'] = 'https://auth.oetcloud.com'
-            oetc['orchestrator_server_url'] = 'https://orchestrator.oetcloud.com'
-            oetc['compute_provider'] = ComputeProvider.GCP,
-            oetc['cpu_cores'] = 4 # adjust as needed; RAM = #CPUs * 8 [GB]
-            oetc['disk_space_gb'] = 20 # adjust as needed [GB]
-            oetc['delete_worker_on_error'] = False
-            oetc['credentials'] = OetcCredentials(
-                email=os.environ['OETC_EMAIL'], password=os.environ['OETC_PASSWORD'])
-            oetc['solver'] = globals()['solver_name']
-            oetc['solver_options'] = get_solver_setting()
+            oetc["name"] = f"PyPSA-X-{rndStr}"
+            oetc["authentication_server_url"] = "https://auth.oetcloud.com"
+            oetc["orchestrator_server_url"] = "https://orchestrator.oetcloud.com"
+            oetc["compute_provider"] = (ComputeProvider.GCP,)
+            oetc["cpu_cores"] = 4  # adjust as needed; RAM = #CPUs * 8 [GB]
+            oetc["disk_space_gb"] = 20  # adjust as needed [GB]
+            oetc["delete_worker_on_error"] = False
+            oetc["credentials"] = OetcCredentials(
+                email=os.environ["OETC_EMAIL"], password=os.environ["OETC_PASSWORD"]
+            )
+            oetc["solver"] = globals()["solver_name"]
+            oetc["solver_options"] = get_solver_setting()
             oetc_settings = OetcSettings(**oetc)
             oetc_handler = OetcHandler(oetc_settings)
-            kwargs['remote'] = oetc_handler
-            print ('info! initiated OETC successfully')
+            kwargs["remote"] = oetc_handler
+            print("info! initiated OETC successfully")
         #
-        except Exception as e: 
-            print (f'info! not able to initiate OETC\n{e}')
-            globals()['solver_name'] = 'highs'
-            globals()['use_oetc'] = 'False'
+        except Exception as e:
+            print(f"info! not able to initiate OETC\n{e}")
+            globals()["solver_name"] = "highs"
+            globals()["use_oetc"] = "False"
     #
     else:
-        print ('info! use local solver')
-        globals()['solver_name'] = 'highs'
+        print("info! use local solver")
+        globals()["solver_name"] = "highs"
     #
-    kwargs['solver_options'] = get_solver_setting()
-    print (f'info! solver to use: {globals()['solver_name']}\n')
+    kwargs["solver_options"] = get_solver_setting()
+    print(f"info! solver to use: {globals()['solver_name']}\n")
     #
     return kwargs
 
 
-def main(
-    ) -> None:
+def main() -> None:
     """
     Main function.
 
@@ -3027,29 +3185,26 @@ def main(
     # read the optimization settings and scenario definitions
     opt_params, df_scens, df_stochs = read_all_params(excel_filename)
     # check the OETC usage and settings
-    globals()['kwargs'] = {}
+    globals()["kwargs"] = {}
     # set solver options
-    kwargs = check_oetc_usage(globals()['kwargs'])
+    kwargs = check_oetc_usage(globals()["kwargs"])
     #
     # create and/or get the base network
-    read_excel_data(
-        excel_filename, 
-        globals()['target_folder'], 
-        globals()['temp_file'])
+    read_excel_data(excel_filename, globals()["target_folder"], globals()["temp_file"])
     #
     # validate if all scenario adjustments are in general ok
     all_adjustments_ok = validate_scenario_adjustments(
-        f'{globals()['target_folder']}/{globals()['temp_file']}', 
-        df_scens)
+        f"{globals()['target_folder']}/{globals()['temp_file']}", df_scens
+    )
     #
     # get the active scenarios only
-    unique_scens = df_scens.sort_values('scenario').scenario.unique()
-    print (f'{len(unique_scens)} active scenario(s) (ordered by name):')
-    print (f'{list(unique_scens)}\n')
-    print (f'{len(df_scens)} active lines for scenario adjustments:\n', df_scens)
+    unique_scens = df_scens.sort_values("scenario").scenario.unique()
+    print(f"{len(unique_scens)} active scenario(s) (ordered by name):")
+    print(f"{list(unique_scens)}\n")
+    print(f"{len(df_scens)} active lines for scenario adjustments:\n", df_scens)
     #
-    if eval(globals()['run_stochastic_runs']):
-        print (f'{len(df_stochs)} active lines for stochastic adjustments:\n', df_stochs)
+    if eval(globals()["run_stochastic_runs"]):
+        print(f"{len(df_stochs)} active lines for stochastic adjustments:\n", df_stochs)
     #
     list_results = []
     list_supplies = []
@@ -3057,46 +3212,43 @@ def main(
     list_curtailments = []
     #
     # import the just created PyPSA network details and check for consistency
-    print ('\nload the temporary network model ...')
+    print("\nload the temporary network model ...")
     n, inv_periods = read_and_update_network(
-        f'{globals()['target_folder']}/{globals()['temp_file']}',
+        f"{globals()['target_folder']}/{globals()['temp_file']}",
         pd.core.frame.DataFrame(),
-        df_scens.scenario.unique()[0])
+        df_scens.scenario.unique()[0],
+    )
     #
     if all_adjustments_ok:
-        n, list_results, list_supplies, list_balances, list_curtailments, \
-            status, tc = do_all_runs(
-                n, 
-                df_scens,
-                df_stochs,
-                kwargs)
+        n, list_results, list_supplies, list_balances, list_curtailments, status, tc = (
+            do_all_runs(n, df_scens, df_stochs, kwargs)
+        )
         #
-        if status != 'ok':
-            print ('\nError! check your settings!')
-            print (f'optimization ended with status "{status}" and termination code "{tc}"')
+        if status != "ok":
+            print("\nError! check your settings!")
+            print(
+                f'optimization ended with status "{status}" and termination code "{tc}"'
+            )
         #
         if len(list_results) > 1:
             df = show_case_comparison(
-                list_results,
-                list_supplies, 
-                list_balances,
-                list_curtailments)
+                list_results, list_supplies, list_balances, list_curtailments
+            )
             #
-            df.to_excel(f'{globals()['target_folder']}/run_comparison.xlsx')
+            df.to_excel(f"{globals()['target_folder']}/run_comparison.xlsx")
         #
         else:
             df = pd.DataFrame()
     #
     else:
         df = pd.DataFrame()
-        print ('\nerror! Could not validate all scenario settings')
+        print("\nerror! Could not validate all scenario settings")
     #
     return n, list_results, list_supplies, list_balances, list_curtailments, df
 
 
 # MAIN ------------------------------------------------------------------------
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # main()
     n, list_results, list_supplies, list_balances, list_curtailments, df = main()
-
