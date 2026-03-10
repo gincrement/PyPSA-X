@@ -26,22 +26,21 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 """
 
 
-default_xls_filename = 'PyPSA_PtX_AB_v1.0.0.xls'
+default_excel_filename = 'PyPSA_PtX_AB_v1.0.0.xls'
 
 # -----------------------------------------------------------------------------
 # No need to change code below this line ...
 # -----------------------------------------------------------------------------
 
-__version__ = '0.9.1'
+__version__ = '0.9.3-dev'
 
 from datetime import datetime
 
 print (f'\nPtX / µgrid Optimizer v{__version__}')
-print (f'(c) {datetime.now().year}\n')
+print (f'(c) 2025-{datetime.now().year}\n')
 print (('+' + '-'*80 + '+'))
 print ('| MIT License                                                                    |')
 print (('| ' + '='*11 + ' '*68 + '|'))
@@ -60,34 +59,45 @@ import sys
 if (len(sys.argv) > 1) and \
    (sys.argv[0] != ''):
     if os.path.exists(sys.argv[1]):
-        xls_filename = sys.argv[1]
+        excel_filename = sys.argv[1]
     #
     else:
         print (f'error! provided XLSX file does not exist: {sys.argv[1]}\n')
-        print (f'fallback to default XLSX file: {default_xls_filename}\n')
-        xls_filename = default_xls_filename
+        print (f'fallback to default XLSX file: {default_excel_filename}\n')
+        excel_filename = default_excel_filename
 #
 else:
-    xls_filename = default_xls_filename
+    excel_filename = default_excel_filename
 
 # check if the Excel file exists
-if not os.path.exists(xls_filename):
-    print (f'error! the provided input file "{xls_filename}" does not exist\n')
+if not os.path.exists(excel_filename):
+    print (f'error! the provided input file "{excel_filename}" does not exist\n')
     sys.exit (-1)
 
 deactivate_network_viewers = True
 
-try:
-    from packaging import version
+from importlib.util import find_spec
+
+# optional packages are related to optional HTML network viewer and SVG result
+# graph
+if find_spec('pypsa'):
+    import re
     import pypsa
+    from packaging import version
+    import importlib
+    #
+    PYPSA_VERSION = importlib.metadata.version('pypsa')
+    PYPSA_V1 = bool(re.match(r"^1\.\d", PYPSA_VERSION))
+    PYPSA_VERSION_NEEDED = "1.1.0" # for tsam feature
+    #
     # make sure to use the new API
     pypsa.options.api.new_components_api = True
     pypsa.options.set_option("params.statistics.nice_names", False)
     pypsa.options.set_option("params.statistics.round", 2)
     pypsa.options.set_option("debug.runtime_verification", False)
     #
-    if version.parse (pypsa.__version__) < version.parse ('1.0.0'):
-        print ('\nerror! installed PyPSA version ({pypsa.__version__)) not supported! need at least v1.0.0')
+    if version.parse (PYPSA_VERSION) < version.parse ('1.0.0'):
+        print ('\nerror! installed PyPSA version ({PYPSA_VERSION)) not supported! need at least v1.0.0')
         sys.exit (-1)
     #
     import linopy
@@ -116,37 +126,37 @@ try:
     #
     print ('imported all necessary libraries')
     #
-except Exception as e: 
-    print (f'error! not able to import the key package(s)\n{e}\n')
+else: 
+    print ('error! PyPSA is not installed\n')
     sys.exit(-1)
 
 # optional packages are related to optional HTML network viewer and SVG result
 # graph
-try:
+if find_spec('pypsa_network_viewer'):
     from pypsa_network_viewer import html_viewer
     network_viewer = True
 #
-except:
+else:
     network_viewer = False
 
-try:
+if find_spec('matplotlib.pyplot') and find_spec('networkx'):
     import matplotlib.pyplot as plt
     import networkx as nx
     networkx_viewer = True
 #
-except:
+else:
     networkx_viewer = False
 
-try:
-    import tsam.timeseriesaggregation as tsam
+if find_spec('tsam'):
     tsam_avail = True
 #
-except:
+else:
     tsam_avail = False
 
 if deactivate_network_viewers:
     network_viewer = False
     networkx_viewer = False
+
 
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
@@ -185,6 +195,7 @@ def getsize(obj):
     #
     return size
 
+
 #
 # source:
 # https://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits/23728630#23728630
@@ -199,12 +210,9 @@ def random_string(string_length=10):
 
 
 def read_excel_data(
-        xls_file: str, 
+        excel_file: str, 
         target_folder: str = None, 
-        csv_subfolder: str = None, 
         temp_file: str = None, 
-        sheets_list: list = None, 
-        sheets_ts_list: list = None,
     ) -> None:
     """
     Read the input Excel file (aka as Assumption Book) which contains all
@@ -213,25 +221,16 @@ def read_excel_data(
     
     Parameters
     ----------
-    xls_file : str
+    excel_file : str
         Name of the Excel file to be considered.
 
     target_folder: str = None
         Name of the folder to store all temporary and final files (e.g.,
         initial CSV files, base and result NC files).
 
-    csv_subfolder: str = None
-        Name of the folder to store the original CSV files in.
-
     temp_file: str = None
         Name of the temporary NC file after reading the CSV file and adjusting
         options based on the scenario definition in the assumption book.
-
-    sheets_list: list = None
-        List of PyPSA static sheets to read (if exist).
-
-    sheets_ts_list: list = None
-        List of PyPSA dynamic sheets to read (if exist).
 
     Returns
     -------
@@ -239,64 +238,32 @@ def read_excel_data(
     """
     #
     # check if the required folder exist, if not create them
-    if not (os.path.exists(f'{target_folder}') or \
-            os.path.exists(f'{target_folder}/{csv_subfolder}')):
+    if not os.path.exists(f'{target_folder}'):
         os.makedirs(f'{target_folder}')
-        os.makedirs(f'{target_folder}/{csv_subfolder}')
     #
     # collect the time of the xls file
-    xlstime = os.path.getmtime(xls_file)
+    xls_time = os.path.getmtime(excel_file)
     #
     # check if the NC base case file is available, if yes collect its timestamp
     if os.path.isfile(f'{target_folder}/{temp_file}'):
-        nctime = os.path.getmtime(f'{target_folder}/{temp_file}')
+        nc_time = os.path.getmtime(f'{target_folder}/{temp_file}')
     #
     else:
-        nctime  = xlstime
+        nc_time  = xls_time
     #
-    comps = pypsa.descriptors.nominal_attrs
     # if the base case NC file is younger as the Excel file, recreate it
-    if (xlstime >= nctime):
-        print (f'read energy system details from {xls_file}...')
-        #
-        all_sheets = sheets_list + sheets_ts_list
-        all_sheets.sort()
-        #
-        # Create CSV files for all identified PyPSA worksheets
-        for sheet_name in all_sheets:
-            try:
-                # read the excel file sheet by sheet
-                data = pd.read_excel(
-                    xls_file, 
-                    sheet_name=sheet_name)
-                #
-                # set the PyPSA version of the current installation to avoid
-                # a warning message
-                if sheet_name == 'network':
-                    data.pypsa_version = pypsa.__version__
-                #
-                # and save the individual CSV file
-                csv_file = f'{target_folder}/{csv_subfolder}/{sheet_name}.csv'
-                data.to_csv(
-                    csv_file, 
-                    index=False)
-                #
-                print (f'x) {sheet_name}')
-            #
-            except:
-                pass
-        #
-        print ('\ntransfer it into an NC file ...')
-        # createa a new PyPSA network
-        n = pypsa.Network()
-        n.set_snapshots(
-            pd.date_range(f'{str(globals()['project_cod'])}-01-01',
-                          freq='1h', 
-                          periods=globals()['total_snapshot']))
-        # load the just created CSV files
-        n.import_from_csv_folder(f'{target_folder}/{csv_subfolder}')
+    if (xls_time >= nc_time):
+        print (f'read energy system details from {excel_file} ...')
+        # createa PyPSA network from CSV files
+        n = pypsa.Network(excel_file)
         n.consistency_check()
         #
+        # save ariginal base case as NC file
+        save_network(
+            n, 
+            f'{target_folder}/{temp_file.replace('.nc', '_rev0.nc')}')
+        #
+        # during model setup it might be useful to limit the snapshots to consider
         if (eval(globals()['debug_mode'])) and \
            (globals()['hours_to_optimize'] < 8760):
             print (f'\ndebugging is enabled, therefore only {globals()['hours_to_optimize']} hours are considered in the optimization')
@@ -305,105 +272,63 @@ def read_excel_data(
                     f'{globals()['project_cod']}-01-01', freq='h', 
                     periods=globals()['hours_to_optimize']))
         #
+        # # otherwise check if time segmentation should be done
+        elif (tsam_avail) and (eval(globals()['do_segmentation'])):
+            resolution = globals()['segmentation_hours']
+            hours = len(n.snapshots)
+            # calculate number of segments equivalent to resolution
+            segments = int(hours / resolution)
+            #
+            print (f'use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ...')
+            #
+            if not version.parse(PYPSA_VERSION) >= version.parse(PYPSA_VERSION_NEEDED):
+                print ('\nerror! installed PyPSA version ({PYPSA_VERSION)) does not support segmentation! need at least v{PYPSA_VERSION_NEEDED}')
+                sys.exit (-1)
+            #
+            if globals()['segmentation_function'] == 'resample':
+                print (f'segmentation function: {globals()['segmentation_function']}')
+                m = n.cluster.temporal.resample(f'{hours}h')
+            #
+            elif globals()['segmentation_function'] == 'downsample':
+                print (f'segmentation function: {globals()['segmentation_function']}')
+                m = n.cluster.temporal.downsample(hours)
+            #
+            elif globals()['segmentation_function'] == 'segment':
+                print (f'segmentation function: {globals()['segmentation_function']}')
+                if not n.has_periods:
+                    m = n.cluster.temporal.segment(segments)
+                #
+                else:
+                    print ('warning! network has investment periods defined, therefore switch to "resample" ...')
+                    m = n.cluster.temporal.resample(f'{hours}h')
+            #
+            else:
+                print (f'error! segmentation function: {globals()['segmentation_function']} is not defined!')
+                sys.exit (-1)
+        else:
+            m = n
+        #
         inv_periods = np.array(eval(globals()['investment_periods']))
         n.set_investment_periods(inv_periods)
-        #
         inv_weightings = np.array(eval(globals()['investment_weighting']))
         #
         for year in n.investment_period_weightings.index:
             pos = np.where(n.investment_period_weightings.index == year)
             n.investment_period_weightings.loc[year] = inv_weightings[pos]
         #
-        # check if time segmentation should be done
-        if (tsam_avail) and \
-           (eval(globals()['do_segmentation'])):
-            print (f'info! use segmentation {globals()['segmentation_duration']}h steps (on average) ...')
-            #
-            resolution = globals()['segmentation_duration']
-            hours = len(n.snapshots)
-            # calculate number of segments equivalent to resolution
-            segments = int(hours / resolution)
-            #
-            # concatenate and normalize all time series with min-max normalization
-            df_all = pd.core.frame.DataFrame()
-            collected_columns = 0
-            #
-            # loop through all components
-            for c in comps:
-                df = n.c[c].dynamic
-                #
-                for col in df:
-                    # only add columns with available data
-                    if df[col].count().sum().sum() > 0:
-                        collected_columns += 1
-                        df_tmp = df[col].add_prefix(f'{c}-{col}-').copy()
-                        df_all = pd.concat([
-                            df_all,
-                            df_tmp], axis=1)
-            #
-            # loop through all collected columns and remove the once with constant values
-            for col in df_all.columns:
-                if df_all[col].std() < 0.1e-10:
-                    df_all.drop(col, axis=1, inplace=True)
-            #
-            df_all = df_all.reset_index()
-            if 'period' in df_all.columns:
-                df_all.drop('period', axis=1, inplace=True)
-            #
-            df_all.set_index('timestep', inplace=True)
-            df_norm = (df_all - df_all.min()) / (df_all.max() - df_all.min())
-            #
-            # use `tsam` to run segmentation clustering algorithm
-            agg = tsam.TimeSeriesAggregation(
-                df_norm,
-                hoursPerPeriod=len(df_norm),
-                noTypicalPeriods=1,
-                noSegments=segments,
-                segmentation=True,
-                solver=globals()['solver_name'],
-            )
-            agg2 = agg.createTypicalPeriods()
-            #
-            # translate segments into time stamps and calculate new weightings
-            weightings = agg2.index.get_level_values('Segment Duration')
-            offsets = np.insert(np.cumsum(weightings[:-1]), 0, 0)
-            #
-            weightings = n.snapshot_weightings.iloc[offsets].mul(weightings, axis=0).\
-                reset_index().set_index('timestep')
-            #
-            # aggregate the hourly time series by averaging over the segments
-            mapping = (
-                pd.Series(weightings.index, index=weightings.index).reindex(df_all.index).ffill()
-            )
-            #
-            # loop through all collected columns and adjust the values based on 
-            # the mapping from the previous steps
-            for long_col in df_all.columns:
-                c = long_col[:long_col.find('-')]
-                col = long_col[(long_col.find('-')+1):\
-                               long_col.find('-', long_col.find('-')+1)]
-                t = long_col[(long_col.find('-', long_col.find('-')+1)+1):]
-                n.c[c].dynamic[col][t] = \
-                    n.c[c].dynamic[col][t].groupby(by=["timestep"], 
-                                                   group_keys=mapping).mean().values
-            #
-            # set new segmented snapshots and adjust weightings
-            weightings = weightings.reset_index().set_index(['period', 'timestep'])
-            n.set_snapshots(weightings.index)
-            n.snapshot_weightings = weightings
-        #
-        # save them into a base case NC file
+        # save adjusted case as NC file
         save_network(
-            n, 
+            m, 
             f'{target_folder}/{temp_file}')
     #
     else:
-        print (f'no need to re-read energy system details from {xls_file}\n')
+        print (f'no need to re-read energy system details from {excel_file}\n')
     #
     return None
 
+
 def read_all_params(
-        xls_file: str
+        excel_file: str
     ) -> tuple [pd.core.frame.DataFrame, 
                 pd.core.frame.DataFrame, 
                 pd.core.frame.DataFrame]:
@@ -413,7 +338,7 @@ def read_all_params(
     
     Parameters
     ----------
-    xls_file : str
+    excel_file : str
         Name of the Excel file to be considered.
 
     Returns
@@ -440,10 +365,13 @@ def read_all_params(
         'hours_to_optimize': (24*3),
         # Other settings
         'target_folder': f'./run_{uuid.uuid4().hex}',
-        'csv_subfolder': 'csv_model',
+        'csv_subfolder': 'csv_model', # not necessary anymore
         'temp_file': 'base_model.nc',
         'result_file': 'result',
         'use_oetc': 'False',
+        'do_segmentation': 'False',
+        'segmentation_function': 'segment',
+        'segmentation_hours': 4,
         'run_scenarios': 'False',
         'modular_representation': 'False',
         'transmission_losses': '0',
@@ -462,8 +390,6 @@ def read_all_params(
         'years_of_operation': 25,
         'link_ports': 2,
         'total_snapshot': 8760,
-        'do_segmentation': 'False',
-        'segmentation_duration': 3, # in hours
         # general solver settings
         'mipgap': 0.001,
         'timelimit_in_hours': 1,
@@ -503,9 +429,9 @@ def read_all_params(
         'rm_load_name': 'LOAD_EL_01',
     }
     #
-    print (f'\nread optimization and scenario settings from {xls_file} ...')
+    print (f'\nread optimization and scenario settings from {excel_file} ...')
     data = pd.read_excel(
-        xls_file, 
+        excel_file, 
         sheet_name=own_sheets)
     #
     df_params = []
@@ -579,9 +505,8 @@ def read_all_params(
     else:
         globals()['multi_investment_periods'] = 'True'
     #
-    print ('hours_to_optimize:', globals()['hours_to_optimize'])
-    #
     return df_params, scen_params, stoch_params
+
 
 def get_solver_setting (
     ) -> dict:
@@ -652,6 +577,7 @@ def get_solver_setting (
     #
     return solver_options
 
+
 def validate_scenario_adjustments(
         temp_file: str, 
         df_scens: pd.core.frame.DataFrame,
@@ -674,9 +600,7 @@ def validate_scenario_adjustments(
     """
     #
     print ('load the temporary network model to validate the scenario changes ...')
-    n = pypsa.Network()
-    n.import_from_netcdf(
-        temp_file)
+    n = pypsa.Network(temp_file)
     all_adjustments_ok = True
     #
     for scenario in df_scens.scenario.unique():
@@ -704,6 +628,7 @@ def validate_scenario_adjustments(
     #
     print ('')
     return all_adjustments_ok
+
 
 def update_network(
         n: pypsa.Network,
@@ -807,6 +732,7 @@ def update_network(
     #
     return n
 
+
 def read_and_update_network(
         temp_file: str, 
         df_scens: pd.core.frame.DataFrame = pd.core.frame.DataFrame(), 
@@ -833,9 +759,7 @@ def read_and_update_network(
         PyPSA network containing the new scenario to optimize.
     """
     #
-    n = pypsa.Network()
-    n.import_from_netcdf(
-        temp_file)
+    n = pypsa.Network(temp_file)
     #
     if len(df_scens) > 0:
         n = update_network(
@@ -886,45 +810,6 @@ def read_and_update_network(
     #
     return n, inv_periods
 
-def get_pypsa_component_lists(
-    ) -> tuple [list, 
-                list]:
-    """
-    Get the list of possible static and dynamic PyPSA DataFrames to be read
-    from the Excel assumption book.
-    
-    Parameters
-    ----------
-    None
-
-    Returns
-    -------
-    sheets_list: list
-        PyPSA's static DataFrame options.
-
-    sheets_ts_list: list
-        PyPSA's dynamic DataFrame options.
-    """
-    #
-    n = pypsa.Network()
-    sheets_list = ['network']  # possible components within the pypsa module
-    sheets_ts_list = []        # possible time-dependent details
-    #
-    for key in n.c.keys():
-        c = n.c[key].name
-        if c not in ['SubNetwork']:
-            sheets_list.append(key)
-            #
-            for idx in n.c[c].dynamic:
-                sheets_ts_list.append(f'{key}-{idx}')
-    #
-    # make sure that enough ports are considered
-    for i in range(0, globals()['link_ports']+1):
-        if f'links-p{i}' not in sheets_ts_list:
-            sheets_ts_list.append(f'links-efficiency{i}')
-            sheets_ts_list.append(f'links-p{i}')
-    #
-    return sheets_list, sheets_ts_list
 
 def save_network(
         n: pypsa.Network, 
@@ -955,6 +840,7 @@ def save_network(
     n.export_to_netcdf(file_name)
     #
     return None
+
 
 def save_network_svg(
         n: pypsa.Network,
@@ -1147,6 +1033,7 @@ def save_network_svg(
     #
     return G
 
+
 def remove_unused_details(
         n: pypsa.Network
     ) -> pypsa.Network:
@@ -1216,6 +1103,7 @@ def remove_unused_details(
     #
     return n
 
+
 def adjust_for_rollinghorizon(
         n: pypsa.Network
     ) -> pypsa.Network:
@@ -1268,7 +1156,8 @@ def adjust_for_rollinghorizon(
             df['e_initial'] = 0
     #
     return n
-                    
+
+
 def create_summaries(
         n: pypsa.Network, 
         scenario: str, 
@@ -1408,6 +1297,7 @@ def create_summaries(
     #
     return list_results, list_supplies, list_balances, list_curtailments
 
+
 def set_optimized_capacities(
         n: pypsa.Network, 
         period: int = 0,
@@ -1437,7 +1327,6 @@ def set_optimized_capacities(
         for c in comps:
             attr = comps[c]
             if period > 0:
-                print (c)
                 df = n.c[c].static
                 df[df.build_year == period][attr] = \
                     df[df.build_year == period][f'{attr}_opt']
@@ -1458,6 +1347,7 @@ def set_optimized_capacities(
         print ('!! cannot set optimal capacities as n.is_solved = False !!')
     #
     return None
+
 
 def show_case_comparison(
         list_results: list,
@@ -1515,12 +1405,14 @@ def show_case_comparison(
         #
         else:
             next_col = col
+    #
     print (f'{df}\n')
     print (f'{pd.concat(list_supplies, axis=1).sort_index().replace(np.nan, '-')}\n')
     print (f'{pd.concat(list_balances, axis=1).sort_index().replace(np.nan, '-')}\n')
     print (f'{pd.concat(list_curtailments, axis=1).sort_index().replace(np.nan, '-')}\n')
     #
     return df
+
 
 def do_optimization(
         n: pypsa.Network,
@@ -1670,6 +1562,7 @@ def do_optimization(
     print (f'optimization duration: {round(n.duration,2)}\n')
     #
     return n, status, tc
+
 
 def do_all_runs(
         n: pypsa.Network, 
@@ -1860,6 +1753,7 @@ def validate_technology_exists(
         print (f'info! technology {c}.{t} does not exist')
         return False
 
+
 def link_capacities(
         n: pypsa.Network
     ) -> None:
@@ -1941,6 +1835,7 @@ def link_capacities(
     #
     return None
 
+
 def link_operation(
         n: pypsa.Network
     ) -> None:
@@ -2010,6 +1905,7 @@ def link_operation(
                         print (f'info! constraint "{constr_name}" is misconfigured')
     #
     return None
+
 
 def limit_hourly_operation_by_capacity(
         n: pypsa.Network
@@ -2108,6 +2004,7 @@ def limit_hourly_operation_by_capacity(
     #
     return None
 
+
 def minimum_load_if_operates(
         n: pypsa.Network,
         bigM: float = 1e8,
@@ -2180,6 +2077,7 @@ def minimum_load_if_operates(
     #
     return None
 
+
 def invest_if_installed(
         n: pypsa.Network,
         bigM: float = 1e8,
@@ -2248,6 +2146,7 @@ def invest_if_installed(
     #
     return None
 
+
 def min_capacity_if_installed(
         n: pypsa.Network,
         bigM: float = 1e8,
@@ -2315,6 +2214,7 @@ def min_capacity_if_installed(
     #
     return None
 
+
 def background_marginal_cost(
         n: pypsa.Network,
     ) -> None:
@@ -2365,6 +2265,7 @@ def background_marginal_cost(
                 print (f'added constraint {c}.{t}.{col}')
     #
     return None
+
 
 def shared_technology_potential(
         n: pypsa.Network,
@@ -2433,6 +2334,7 @@ def shared_technology_potential(
     #
     return None
 
+
 def force_technology_capacity(
         n: pypsa.Network,
     ) -> None:
@@ -2490,6 +2392,7 @@ def force_technology_capacity(
     #
     return None
 
+
 def mga_settings(
         n: pypsa.Network, 
     ) -> None:
@@ -2532,6 +2435,181 @@ def mga_settings(
     print (f'added constraint {constr_name}')
     #
     return None
+
+
+def reserve_constraints(
+        n: pypsa.Network, 
+    ) -> None:
+    """
+    Adds constraints for reserve margin consideration.
+    The following column in the individual DataFrames needs to be defined:
+        _rm_participation
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    print ('fct reserve_constraints not active yet!')
+    #
+    return True
+    #
+    # TODO needs some tuning, or?
+    # x) reserve contribution is limited by ramp rates
+    # x) also links should be able to contribute (e.g., charger, discharger)
+    #    but only if the battery has capacity to support the relevant action
+    #    e.g. storage level above reserve contribution for at least X hours (1, or what?)
+    # x) reserve at least the size of the largest unit being built or is built
+    #
+    m = n.model
+    col = '_rm_participation'
+    comps = pypsa.descriptors.nominal_attrs
+    #
+    # reserve_req >= Fa * ( ( Fb * load + Fc**2 )**(Fd) ) - Fe
+    Fa = globals()['rm_factor_a'] # 1
+    Fb = globals()['rm_factor_b'] # 0.15
+    Fc = globals()['rm_factor_c'] # 0
+    Fd = globals()['rm_factor_d'] # 1
+    Fe = globals()['rm_factor_e'] # 0
+    #
+    # loop through all components
+    for c in ['Generator']: # comps:
+        df = n.c[c].static
+        if col in df.columns:
+            #
+            # create the binary status variable
+            var_name = f'{c}-p_reserve_up'
+            if var_name not in m.variables:
+                v_rp = m.add_variables(
+                    lower=0,
+                    name=var_name, 
+                    coords=[n.snapshots, df.index])
+            #
+            else:
+                v_rp = m.variables[var_name]
+            #
+            # get the variables
+            attr = comps[c]
+            link_cap = m.variables[f'{c}-{attr}']
+            # dispatch = m.variables[f'{c}-{attr[0]}']
+            # reserve = m.variables[var_name]
+            #
+            rm_class = globals()['rm_load_class']
+            rm_tech = globals()['rm_load_name']
+            load = n.c[rm_class].static[attr[0]+'_set'][rm_tech]
+            #
+            # add the constraints
+            constr_name = 'Global-hourly_reserve_requirement-equation'
+            m.add_constraints(
+                v_rp.sum('name') >= Fa * ( ( Fb * load + Fc**2 )**(Fd) ) - Fe, 
+                name=constr_name)
+            #
+            constr_name = f'{c}-reserve_up-limit-available_capacity'
+            m.add_constraints(
+                link_cap - m.variables[f'{var_name}'] - m.variables[f'{c}-{attr[0]}'] >= 0, 
+                name=constr_name,
+                coords=[n.snapshots, df.index])
+            #
+            constr_name = f'{c}-reserve_up-limit-min_pu'
+            m.add_constraints(
+                v_rp <= df[col] * (1 - df[attr[0]+'_min_pu']) * link_cap, 
+                name=constr_name,
+                coords=[n.snapshots, df.index])
+            #
+            constr_name = f'{c}-reserve_up-limit-ramp_up'
+            m.add_constraints(
+                v_rp <= df[col] * df['ramp_limit_up'].fillna(1) * link_cap, 
+                name=constr_name,
+                coords=[n.snapshots, df.index])
+            #
+            """
+            if eval(globals()['rm_max_generator']):
+                constr_name = f'{c}-sum_of_reserves-largest_unit'
+                m.add_constraints(
+                    # v_rp.sum('name') >= n_reserve.static.generators.p_nom.max(), 
+                    c = 'Generator'
+                    v_rp.sum('name') >= n.c[c].static.p_nom.max() * 1, 
+                    name=constr_name)
+            """
+            #
+            # add cost to the objective function
+            tech_flow = m.variables[f'{var_name}']
+            m.objective += (tech_flow * n.c[c].static.marginal_cost).sum()
+    #
+    return None
+
+
+def limit_operation_of_emergency_technology(
+        n: pypsa.Network,
+        bigM: float = 1e8,
+    ) -> None:
+    """
+    Limit the operation of emergency operators (in hours per year).
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    bigM: float = 1e8
+        Big M variable.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    col = '_max_op_hours'
+    comps = pypsa.descriptors.nominal_attrs
+    #
+    # loop through all components
+    for c in comps:
+        df = n.c[c].static
+        #
+        if col in df.columns:
+            for t, row in df[df[col] > 0].iterrows():
+          		# the scenario name comes before the technology name
+                if n.has_scenarios:
+                    t = t[1]
+                #
+                # create the binary status variable
+                var_name = f'{c}-{t}-hourly-opstatus'
+                if var_name not in m.variables:
+                    status = m.add_variables (
+                        name=var_name, 
+                        binary=True,
+                        coords=[n.snapshots])
+                #
+                else:
+                    status = m.variables[var_name]
+                #
+                # get the variables
+                op_col = comps[c][0]
+                dispatch = m.variables[f'{c}-{op_col}'].loc[:, t]
+                #
+                constr_name = f'{c}-{t}-is_online_if_in_operation'
+                if constr_name not in m.constraints:
+                    m.add_constraints(
+                        dispatch <= bigM * status,
+                        name=constr_name)
+                #
+                # loop through available years
+                for y in n.snapshots.to_frame().period.unique():
+                    constr_name = f'{c}-{t}-limit_hours_of_op-{y}'
+                    if constr_name not in m.constraints:
+                        m.add_constraints(
+                            status.loc[y].sum() <= float(row[col]),
+                            name=constr_name)
+                        print (f'added {constr_name}')
+    #
+    return None
+
 
 def strict_unsimultaneous_charging_discharging(
         n: pypsa.Network, 
@@ -2640,6 +2718,7 @@ def strict_unsimultaneous_charging_discharging(
     #
     return None
 
+
 def remove_KVL_constraints(
         n: pypsa.Network, 
     ) -> None:
@@ -2664,6 +2743,81 @@ def remove_KVL_constraints(
         print (f'removed {constr_name}')
     #
     return None
+
+
+def consider_retirement_gains (
+        n: pypsa.Network, 
+    ) -> None:
+    """
+    Cost reduction by unused equipment. Very simple implementation for now.
+    The following column in the individual DataFrames needs to be defined:
+        _retirement_gain
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    comps = pypsa.descriptors.nominal_attrs
+    col = '_retirement_gain'
+    #
+    # loop through all components
+    for c in comps:
+        df = n.c[c].static
+        attr = comps[c]
+        #
+        if (f'{c}-{attr}' in m.variables) and \
+           (col in df.columns):
+            # only take the candidates where changes are allowed based on the
+            # provided data (p_nom, p_nom_min, and p_nom_max are not equal)
+            dfs = df[(df[f'{attr}'] !=  df[f'{attr}_min']) & \
+                     (df[f'{attr}'] !=  df[f'{attr}_max'])]
+            #
+            if len(dfs) > 0:
+                final_cap = m.variables[f'{c}-{attr}'].loc[dfs.index.get_level_values('name').unique()]
+                initial_cap = dfs[attr].unique()
+                minimum_cap = dfs[f'{attr}_min'].unique()
+                retirement_cost = dfs[col].unique()
+                #
+                if retirement_cost.sum() > 0:
+                    # add variable to decide if retirement tool place
+                    var_name = f'{c}-retirement'
+                    if var_name not in m.variables:
+                        retired = m.add_variables(
+                            # lower=0, 
+                            coords=[dfs.index.get_level_values('name').unique()],
+                            name=var_name)
+                    #
+                    else:
+                        retired = m.variables[var_name]
+                    #
+                    # add constraint to consider potential retirement
+                    constr_name = f'{c}-retirement-limit1'
+                    if constr_name not in m.constraints:
+                        m.add_constraints(
+                            retired >= initial_cap - final_cap,
+                            name=constr_name)
+                        print (f'added {constr_name}')
+                    #
+                    # add constraint to consider potential retirement
+                    constr_name = f'{c}-retirement-limit2'
+                    if constr_name not in m.constraints:
+                        m.add_constraints(
+                            final_cap - minimum_cap >= 0,
+                            name=constr_name)
+                        print (f'added {constr_name}')
+                    #
+                    # adjust the objectiv function
+                    m.objective += retirement_cost * retired
+    #
+    return None
+
 
 def add_maintenance_constraints(
         n: pypsa.Network, 
@@ -2733,6 +2887,7 @@ def add_maintenance_constraints(
     #
     return None
 
+
 def extra_functionalities(
         n: pypsa.Network, 
         snapshots: pd.core.indexes.datetimes.DatetimeIndex
@@ -2770,6 +2925,15 @@ def extra_functionalities(
         link_capacities(n)
         shared_technology_potential(n)
         force_technology_capacity(n)
+        consider_retirement_gains(n)
+        #
+        if eval(globals()['rm_activate']):
+            if not n.has_scenarios:
+                reserve_constraints(n)
+    #
+    if (eval(globals()['run_mga_runs'])) and \
+       (globals()['mga_slack'] > 0):
+        mga_settings(n)
     #
     # MILP functionalities
     if eval(globals()['do_milp_constraints']):
@@ -2780,6 +2944,7 @@ def extra_functionalities(
         #
         if eval(globals()['do_operational_constraints']):
             minimum_load_if_operates(n)
+            limit_operation_of_emergency_technology(n)
         #
         if eval(globals()['do_investment_constraints']):
             invest_if_installed(n)
@@ -2792,23 +2957,25 @@ def extra_functionalities(
 
 
 def check_oetc_usage(
-    ) -> tuple:
+        kwargs: dict,
+    ) -> dict:
     """
     Check if OETC should be used.
 
     Parameters
     ----------
-    None
+    kwargs: dict
+        Dictionary of keyword arguments.
     
     Returns
     -------
-    kwargs: tuple
-        Additional solver parameters.
+    kwargs: dict
+        Dictionary of keyword arguments.
     """
     #
     if eval(globals()['use_oetc']):
         try:
-            print ('initiating OETC ...')
+            print ('info! try to initiate OETC ...')
             globals()['solver_name'] = 'gurobi'
             # set OETC settings
             rndStr = random_string(6)
@@ -2827,6 +2994,7 @@ def check_oetc_usage(
             oetc_settings = OetcSettings(**oetc)
             oetc_handler = OetcHandler(oetc_settings)
             kwargs['remote'] = oetc_handler
+            print ('info! initiated OETC successfully')
         #
         except Exception as e: 
             print (f'info! not able to initiate OETC\n{e}')
@@ -2834,18 +3002,11 @@ def check_oetc_usage(
             globals()['use_oetc'] = 'False'
     #
     else:
+        print ('info! use local solver')
         globals()['solver_name'] = 'highs'
     #
-    if 'kwargs' not in globals():
-        kwargs = {}
     kwargs['solver_options'] = get_solver_setting()
-    print (f'OETC usage: {globals()['use_oetc']}')
-    #
-    if eval(globals()['use_oetc']):
-        print (f'OET solver to use: {globals()['solver_name']}\n')
-    #
-    else:
-        print (f'Local solver to use: {globals()['solver_name']}\n')
+    print (f'info! solver to use: {globals()['solver_name']}\n')
     #
     return kwargs
 
@@ -2865,22 +3026,17 @@ def main(
     """
     #
     # read the optimization settings and scenario definitions
-    opt_params, df_scens, df_stochs = read_all_params(xls_filename)
+    opt_params, df_scens, df_stochs = read_all_params(excel_filename)
     # check the OETC usage and settings
-    kwargs = check_oetc_usage()
+    globals()['kwargs'] = {}
     # set solver options
-    #
-    # get the PyPSA list of possible components
-    sheets_list, sheets_ts_list = get_pypsa_component_lists()
+    kwargs = check_oetc_usage(globals()['kwargs'])
     #
     # craete and/or get the base network
     read_excel_data(
-        xls_filename, 
+        excel_filename, 
         globals()['target_folder'], 
-        globals()['csv_subfolder'], 
-        globals()['temp_file'], 
-        sheets_list, 
-        sheets_ts_list)
+        globals()['temp_file'])
     #
     # validate if all scenario adjustments are in general ok
     all_adjustments_ok = validate_scenario_adjustments(
@@ -2933,11 +3089,15 @@ def main(
             df = pd.DataFrame()
     #
     else:
+        df = pd.DataFrame()
         print ('\nerror! Could not validate all scenario settings')
     #
     return n, list_results, list_supplies, list_balances, list_curtailments, df
-    
+
+
 # MAIN ------------------------------------------------------------------------
 
 if __name__ == '__main__':
+    # main()
     n, list_results, list_supplies, list_balances, list_curtailments, df = main()
+
