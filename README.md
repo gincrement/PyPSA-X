@@ -48,7 +48,7 @@ resolution to accelerate model optimization or experiment runs.
 - **run scenarios**: adjust individual settings between different optimization runs (e.g,.
 different investment costs, different technology options);
 - **simulation after optimization**: runs a rolling horizon optimization after an successful
-optimization for a more accurate opertional behaviour.
+optimization for a more accurate operational behaviour.
 - **consider retirement gains**: allow retirement of technology which decreases the annual
 maintenance cost;
 - **reserve margin**: adds a preliminary version of operational resereve considerations;

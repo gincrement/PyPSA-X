@@ -34,6 +34,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/charset-normalizer-3.4.4-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.3.1-pyh8f84b5b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cloudpickle-3.1.2-pyhcf101f3_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/codespell-2.4.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py313hc8edb43_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.13.12-py313hd8ed1ab_100.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cryptography-46.0.5-py313heb322e3_0.conda
@@ -618,6 +619,15 @@ packages:
   license_family: BSD
   size: 27353
   timestamp: 1765303462831
+- conda: https://conda.anaconda.org/conda-forge/noarch/codespell-2.4.2-pyhd8ed1ab_0.conda
+  sha256: d09a16087e14faaa92af87a8dcb30e7f85eed2ad1e1f994bb228a482d104d94c
+  md5: dc82cad3ba612ecccbabeb988ca49eae
+  depends:
+  - python >=3.10
+  license: GPL-2.0-only
+  license_family: GPL
+  size: 311547
+  timestamp: 1772791729816
 - conda: https://conda.anaconda.org/conda-forge/linux-64/contourpy-1.3.3-py313hc8edb43_4.conda
   sha256: 7f86eb205d2d7fcf2c82654a08c6a240623ac34cb406206b4b1f1afa5cda8e49
   md5: 33639459bc29437315d4bff9ed5bc7a7

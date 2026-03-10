@@ -120,7 +120,7 @@ if find_spec('pypsa'):
     import warnings
     warnings.filterwarnings('ignore')
     #
-    # surpress PyPSA's logging messages
+    # suppress PyPSA's logging messages
     import logging
     logging.basicConfig(level=logging.ERROR)
     #
@@ -253,7 +253,7 @@ def read_excel_data(
     # if the base case NC file is younger as the Excel file, recreate it
     if (excel_time >= nc_time):
         print (f'read energy system details from {excel_file} ...')
-        # createa PyPSA network from CSV files
+        # create PyPSA network from CSV files
         n = pypsa.Network(excel_file)
         n.consistency_check()
         #
@@ -642,7 +642,7 @@ def update_network(
     Parameters
     ----------
     n: pypsa.Network
-        PyPSA network containing the initial netowrk to optimize.
+        PyPSA network containing the initial network to optimize.
 
     df_adjusts:
         DataFrame containing the required scenario adjustments.
@@ -1670,7 +1670,7 @@ def do_all_runs(
                 n.optimize.fix_optimal_capacities()
                 n = adjust_for_rollinghorizon(n)
                 #
-                # save conditions for later reseting
+                # save conditions for later resetting
                 save_cond_invest = globals()['do_investment_constraints']
                 #
                 globals()['do_investment_constraints'] = 'False'
@@ -1813,7 +1813,7 @@ def link_capacities(
                     valid2 = validate_technology_exists(n, class2, tech2)
                     constr_name = f'Link-capacities-{class1}.{tech1}-{class2}.{tech2}'
                     #
-                    # if the technology defintion is valid, add the constraint
+                    # if the technology definition is valid, add the constraint
                     if valid1 and valid2:
                         # get the variables
                         nom_col1 = comps[class1]
@@ -1886,7 +1886,7 @@ def link_operation(
                     valid2 = validate_technology_exists(n, class2, tech2)
                     constr_name = f'Link-operations-{class1}.{tech1}-{class2}.{tech2}'
                     #
-                    # if the technology defintion is valid, add the constraint
+                    # if the technology definition is valid, add the constraint
                     if valid1 and valid2:
                         # get the variables
                         op_col1 = comps[class1][0]
@@ -1961,14 +1961,14 @@ def limit_hourly_operation_by_capacity(
         columns=['class', 'technology',
                  'limit_op_class', 'limit_op_tech', 'limit_op_sign', 'limit_op_factor'])
     #
-    # loop trough the individual limiting technologies
+    # loop through the individual limiting technologies
     i = 0
     for t in df.limit_op_tech.unique():
         c = df.limit_op_class[df.limit_op_tech == t][0]
         valids = []
         rhs = []
         #
-        # and collect the once refering to them
+        # and collect the once referring to them
         for _, row in df[(df.limit_op_tech == t) & \
                          (df.limit_op_class == c)].iterrows():
             # validate the technology option
@@ -2370,7 +2370,7 @@ def force_technology_capacity(
                     con = 0
                     cap = 0
                     #
-                    # loop through all technology options of the indiviual class
+                    # loop through all technology options of the individual class
                     for t, row in df[df[col] == tech].iterrows():
                         sign = row['_limit_cap_sign']
                         cap = row['_limit_cap']
@@ -3031,7 +3031,7 @@ def main(
     # set solver options
     kwargs = check_oetc_usage(globals()['kwargs'])
     #
-    # craete and/or get the base network
+    # create and/or get the base network
     read_excel_data(
         excel_filename, 
         globals()['target_folder'], 
