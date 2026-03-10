@@ -3004,8 +3004,6 @@ def check_oetc_usage(
         print ('info! use local solver')
         globals()['solver_name'] = 'highs'
     #
-    if 'kwargs' not in globals():
-        kwargs = {}
     kwargs['solver_options'] = get_solver_setting()
     print (f'info! solver to use: {globals()['solver_name']}\n')
     #

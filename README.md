@@ -3,15 +3,15 @@
 **PyPSA-X** is an open-source Python framework for optimising and simulating **power-to-anything
 (PtX) projects** as well as **microgrid projects**. It builds on top of
 [PyPSA](https://github.com/PyPSA/PyPSA) which comes with the following main features:
-- Economic Dispatch (ED),
-- Linear Optimal Power Flow (LOPF),
-- Security-Constrained LOPF (SCLOPF),
-- Capacity Expansion Planning (CEP),
-- Pathway Planning,
-- Stochastic Optimisation,
-- Modelling-to-Generate-Alternatives (MGA),
-- Static Power Flow Analysis, and 
-- Sector-Coupling.
+- **Economic Dispatch** (ED, production cost modelling),
+- **Linear Optimal Power Flow** (LOPF),
+- **Security-Constrained LOPF** (SCLOPF),
+- **Capacity Expansion Planning** (CEP),
+- **Pathway Planning**,
+- **Stochastic Optimisation**,
+- **Modelling-to-Generate-Alternatives** (MGA),
+- **Static Power Flow** Analysis, and 
+- **Sector-Coupling**.
 
 Especially the sector-coupling feature is of interest for **PyPSA-X** which is made for project 
 developers, and industry needing an easy-to-use and transparent tool 
@@ -49,6 +49,11 @@ resolution to accelerate model optimization or experiment runs.
 different investment costs, different technology options);
 - **simulation after optimization**: runs a rolling horizon optimization after an successful
 optimization for a more accurate opertional behaviour.
+- **consider retirement gains**: allow retirement of technology which decreases the annual
+maintenance cost;
+- **reserve margin**: adds a preliminary version of operational resereve considerations;
+- **limit operation**: option to limit the operation of e.g., emergency technology towards a 
+predefined number of hours (e.g., 3 h/a);
 
 ## Installation
 
@@ -72,7 +77,7 @@ pixi shell
 
 ## Usage
 ``` py
-python pypsa-x.py AB_v0.9.1.xlsx
+python pypsa-x.py PyPSA_PtX_AB_v1.0.0.xls
 ```
 
 This executes the **PyPSA-X** script and reads the assumption book 'AB_v0.9.1.xlsx' and follows
