@@ -45,39 +45,27 @@ else:
     print("error! PyPSA is not installed\n")
     sys.exit(-1)
 #
-# -----------------------------------------------------------------------------
-# No need to change code below this line ...
-# -----------------------------------------------------------------------------
-#
 default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xls"
 __version__ = "0.9.3-dev"
 #
-print(f"\nPtX / µgrid Optimizer v{__version__}")
-print(f"(c) 2025-{dt.now().year}\n")
-print(("+" + "-" * 80 + "+"))
-print(
-    "| MIT License                                                                    |"
-)
-print(("| " + "=" * 11 + " " * 68 + "|"))
-print(
-    "| Permission is hereby granted, free of charge, to any person obtaining a copy   |"
-)
-print(
-    '| of this software and associated documentation files (the "Software"), to deal  |'
-)
-print(
-    "| in the Software without restriction, including without limitation the rights   |"
-)
-print(
-    "| to use,copy, modify, merge, publish, distribute, sublicense, and/or sell       |"
-)
-print(
-    "| copies of the Software, and to permit persons to whom the Software is          |"
-)
-print(
-    "| furnished to do so.                                                            |"
-)
-print(("+" + "-" * 80 + "+\n"))
+headers = [
+    f"\nPtX / µgrid Optimizer v{__version__}",
+    f"(c) 2025-{dt.now().year}",
+    "",
+    "+" + "-" * 80 + "+",
+    "| MIT License " + " " * 67 + "|",
+    "| " + "=" * 11 + " " * 68 + "|",
+    "| Permission is hereby granted, free of charge, to any person obtaining a copy   |",
+    '| of this software and associated documentation files (the "Software"), to deal  |',
+    "| in the Software without restriction, including without limitation the rights   |",
+    "| to use,copy, modify, merge, publish, distribute, sublicense, and/or sell       |",
+    "| copies of the Software, and to permit persons to whom the Software is          |",
+    "| furnished to do so." + " " * 60 + "|",
+    "+" + "-" * 80 + "+",
+    ""]
+#
+for header in headers:
+    print (header)
 #
 # check provided arguments on the command line
 if (len(sys.argv) > 1) and (sys.argv[0] != ""):
@@ -284,35 +272,22 @@ def read_excel_data(
         # save ariginal base case as NC file
         save_network(n, f"{target_folder}/{temp_file.replace('.nc', '_rev0.nc')}")
         #
-        # during model setup it might be useful to limit the snapshots to consider
-        if (eval(globals()["debug_mode"])) and (globals()["hours_to_optimize"] < 8760):
-            print(
-                f"\ndebugging is enabled, therefore only {globals()['hours_to_optimize']} hours are considered in the optimization"
-            )
-            n.set_snapshots(
-                pd.date_range(
-                    f"{globals()['project_cod']}-01-01",
-                    freq="h",
-                    periods=globals()["hours_to_optimize"],
-                )
-            )
-        #
-        # # otherwise check if time segmentation should be done
-        elif (tsam_avail) and (eval(globals()["do_segmentation"])):
+        # check if time segmentation should be done
+        if (tsam_avail) and (eval(globals()["do_segmentation"])):
             resolution = globals()["segmentation_hours"]
             hours = len(n.snapshots)
             # calculate number of segments equivalent to resolution
             segments = int(hours / resolution)
-            #
-            print(
-                f"use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ..."
-            )
             #
             if not version.parse(PYPSA_VERSION) >= version.parse(PYPSA_VERSION_NEEDED):
                 print(
                     "\nerror! installed PyPSA version ({PYPSA_VERSION)) does not support segmentation! need at least v{PYPSA_VERSION_NEEDED}"
                 )
                 sys.exit(-1)
+            #
+            print(
+                f"use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ..."
+            )
             #
             if globals()["segmentation_function"] == "resample":
                 print(f"segmentation function: {globals()['segmentation_function']}")
@@ -387,11 +362,11 @@ def read_all_params(
     # define some variables
     defaults = {
         # debug settings
-        "debug_mode": "False",
-        "hours_to_optimize": (24 * 3),
+        "debug_mode": "False",  # not necessary anymore, use segmentation instead
+        "hours_to_optimize": (24 * 3),  # not necessary anymore, use segmentation instead
         # Other settings
         "target_folder": f"./run_{uuid.uuid4().hex}",
-        "csv_subfolder": "csv_model",  # not necessary anymore
+        "csv_subfolder": "csv_model",  # not necessary anymore, use Excel import instead
         "temp_file": "base_model.nc",
         "result_file": "result",
         "use_oetc": "False",
