@@ -1,7 +1,7 @@
 # PyPSA-X - PyPSA for PtX and Microgrid projects
 
-**PyPSA-X** is an open-source Python framework for optimising and simulating **power-to-anything
-(PtX) projects** as well as **microgrid projects**. It builds on top of
+**PyPSA-X** is an open-source Python framework for optimizing and simulating **power-to-anything
+(PtX) projects** as well as **micro-grid projects**. It builds on top of
 [PyPSA](https://github.com/PyPSA/PyPSA) which comes with the following main features:
 - **Economic Dispatch** (ED, production cost modelling),
 - **Linear Optimal Power Flow** (LOPF),
@@ -33,7 +33,7 @@ equal to storage discharger);
 (e.g., different wind turbines with a land limitation);
 - **forced technology capacity**:  force the capacity built to be above or below a certain value
 (e.g., at least 100 MW of any wind turbine technology);
-- **strict unsimultaneous operation**: make sure that 2 technology options can’t operate at the 
+- **strict un-simultaneous operation**: make sure that 2 technology options can’t operate at the 
 same time (e.g., dis-/charging);
 - **minimum load if in operation**: limits the operation of a technology to a given value as 
 minimum operation, but no operation is allowed;
@@ -48,7 +48,7 @@ resolution to accelerate model optimization or experiment runs.
 - **run scenarios**: adjust individual settings between different optimization runs (e.g,.
 different investment costs, different technology options);
 - **simulation after optimization**: runs a rolling horizon optimization after an successful
-optimization for a more accurate operational behaviour.
+optimization for a more accurate operational behavior.
 - **consider retirement gains**: allow retirement of technology which decreases the annual
 maintenance cost;
 - **reserve margin**: adds a preliminary version of operational reserve considerations;
@@ -89,8 +89,8 @@ optimization of different scenarios.
 
 ## Dependencies
 **PyPSA-X** relies heavily on other open-source Python packages. The most important once are:
-- [PyPSA](https://github.com/PyPSA/PyPSA) for optimising and simulating modern power and energy systems;
-- [linopy](https://github.com/PyPSA/linopy) for preparing linear optimisation problems;
+- [PyPSA](https://github.com/PyPSA/PyPSA) for optimizing and simulating modern power and energy systems;
+- [linopy](https://github.com/PyPSA/linopy) for preparing linear optimization problems;
 - [pandas](http://github.com/pandas-dev/pandas) for storing data about components and time series.
 
 **PyPSA-X** can be used with different solvers. For instance, the free solvers such as 

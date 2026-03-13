@@ -132,7 +132,7 @@ if find_spec("pypsa"):
     # especially useful for Windows users
     tempfile.tempdir = os.getcwd()
     #
-    # surpess Pythons warning messaging
+    # suppress Pythons warning messaging
     warnings.filterwarnings("ignore")
     #
     # suppress PyPSA's logging messages
@@ -269,7 +269,7 @@ def read_excel_data(
         n = pypsa.Network(excel_file)
         n.consistency_check()
         #
-        # save ariginal base case as NC file
+        # save original base case as NC file
         save_network(n, f"{target_folder}/{temp_file.replace('.nc', '_rev0.nc')}")
         #
         # check if time segmentation should be done
@@ -522,7 +522,7 @@ def read_all_params(
 
 def get_solver_setting() -> dict:
     """
-    Set the solver settings to control its behaviour during optimization.
+    Set the solver settings to control its behavior during optimization.
 
     Parameters
     ----------
