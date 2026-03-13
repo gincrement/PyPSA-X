@@ -24,7 +24,7 @@ For further information about <ins>PyPSA</ins> please check its  extensive
 - **marginal background cost**: add marginal costs of operation towards the objective function
 without having them as part of the overall investment and operational costs;
 - **link technology operation**: link technology operation to ensure proper operation of e.g., 
-electorlyzers on green electricity only;
+electrolyzers on green electricity only;
 - **limit hourly operation**: limit the hourly operation of several technology options compared 
 with another technology size (e.g., green and grey power purchase and a transformer station);
 - **link of technology capacity**: link the capacity of technologies (e.g., storage charger is 
@@ -43,7 +43,7 @@ cost for ground preparation);
 not force the installation of this capacity;
 - **modular representation**: represents each technology option as individual module instead of
 collection of multiple units;
-- **time series aggregation**: determines typical operation periods or dereases the temporal
+- **time series aggregation**: determines typical operation periods or decreases the temporal
 resolution to accelerate model optimization or experiment runs.
 - **run scenarios**: adjust individual settings between different optimization runs (e.g,.
 different investment costs, different technology options);
@@ -51,7 +51,7 @@ different investment costs, different technology options);
 optimization for a more accurate operational behaviour.
 - **consider retirement gains**: allow retirement of technology which decreases the annual
 maintenance cost;
-- **reserve margin**: adds a preliminary version of operational resereve considerations;
+- **reserve margin**: adds a preliminary version of operational reserve considerations;
 - **limit operation**: option to limit the operation of e.g., emergency technology towards a 
 predefined number of hours (e.g., 3 h/a);
 
@@ -59,7 +59,7 @@ predefined number of hours (e.g., 3 h/a);
 
 ### Clone the Repository
 First of all, clone the **PyPSA-X** repository using the version control system **git** in the
-command line or download the ZIP file from the GiHub server manually.
+command line or download the ZIP file from the GitHub server manually.
 
 ``` bash
 git clone https://github.com/gincrement/PyPSA-X

@@ -3187,7 +3187,7 @@ def main() -> None:
         if status != "ok":
             print("\nError! check your settings!")
             print(
-                f'optimization ended with status "{status}" and termination code "{tc}"'
+                f'optimization ended with status "{status}" and termination code "{tc}"\n'
             )
         #
         if len(list_results) > 1:
