@@ -77,10 +77,10 @@ pixi shell
 
 ## Usage
 ``` py
-python pypsa-x.py PyPSA_PtX_AB_v1.0.0.xls
+python pypsa-x.py AB_rev1.xls
 ```
 
-This executes the **PyPSA-X** script and reads the assumption book 'AB_v0.9.1.xlsx' and follows
+This executes the **PyPSA-X** script and reads the assumption book 'AB_rev1.xls' and follows
 the configuration within the worksheets <ins>opt_params</ins>, and <ins>scen_params</ins>.
 The sheet <ins>opt_params</ins> contains options to guide the PyPSA-X script (e.g., target folder 
 to store the results; OETC settings).
@@ -97,15 +97,18 @@ optimization of different scenarios.
 - [HiGHS](https://highs.dev/) (installed by default),
 - [GLPK](https://www.gnu.org/software/glpk/), and
 - [CBC](https://github.com/coin-or/Cbc/)
+
 or commercial solvers like
 - [Gurobi](http://www.gurobi.com/), and
 - [FICO Xpress](https://www.fico.com/en/products/fico-xpress-optimization).
 
 ## Contributing and Support
-We strongly welcome anyone interested in contributing to this project. If you have any ideas, suggestions 
+We strongly welcome anyone interested in contributing to this project. If you have any ideas, suggestions
 or encounter problems, feel invited to file [issues](https://github.com/gincrement/PyPSA-X/issues) or 
 make [pull requests](https://github.com/gincrement/PyPSA-X/pulls) on GitHub.
 
 ## Licence
 Copyright [PyPSA-X Contributors]
+
 PyPSA-X is licensed under the open source [MIT License](LICENSES/MIT.txt)
+
