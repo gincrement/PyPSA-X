@@ -8,3 +8,7 @@ run_*
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# special files and directories
+pypsa-ptx.py
+_ignore/*
