@@ -265,56 +265,9 @@ def read_excel_data(
     # if the base case NC file is younger as the Excel file, recreate it
     if excel_time >= nc_time:
         print(f"read energy system details from {excel_file} ...")
-        # create PyPSA network from CSV files
+        # create PyPSA network directly from Excel file
         n = pypsa.Network(excel_file)
         n.consistency_check()
-        #
-        # save original base case as NC file
-        save_network(n, f"{target_folder}/{temp_file.replace('.nc', '_rev0.nc')}")
-        #
-        # check if time segmentation should be done
-        if (tsam_avail) and (eval(globals()["do_segmentation"])):
-            resolution = globals()["segmentation_hours"]
-            hours = len(n.snapshots)
-            # calculate number of segments equivalent to resolution
-            segments = int(hours / resolution)
-            #
-            if not version.parse(PYPSA_VERSION) >= version.parse(PYPSA_VERSION_NEEDED):
-                print(
-                    "\nerror! installed PyPSA version ({PYPSA_VERSION)) does not support segmentation! need at least v{PYPSA_VERSION_NEEDED}"
-                )
-                sys.exit(-1)
-            #
-            print(
-                f"use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ..."
-            )
-            #
-            if globals()["segmentation_function"] == "resample":
-                print(f"segmentation function: {globals()['segmentation_function']}")
-                m = n.cluster.temporal.resample(f"{hours}h")
-            #
-            elif globals()["segmentation_function"] == "downsample":
-                print(f"segmentation function: {globals()['segmentation_function']}")
-                m = n.cluster.temporal.downsample(hours)
-            #
-            elif globals()["segmentation_function"] == "segment":
-                print(f"segmentation function: {globals()['segmentation_function']}")
-                if not n.has_periods:
-                    m = n.cluster.temporal.segment(segments)
-                #
-                else:
-                    print(
-                        'warning! network has investment periods defined, therefore switch to "resample" ...'
-                    )
-                    m = n.cluster.temporal.resample(f"{hours}h")
-            #
-            else:
-                print(
-                    f"error! segmentation function: {globals()['segmentation_function']} is not defined!"
-                )
-                sys.exit(-1)
-        else:
-            m = n
         #
         inv_periods = np.array(eval(globals()["investment_periods"]))
         n.set_investment_periods(inv_periods)
@@ -324,8 +277,8 @@ def read_excel_data(
             pos = np.where(n.investment_period_weightings.index == year)
             n.investment_period_weightings.loc[year] = inv_weightings[pos]
         #
-        # save adjusted case as NC file
-        save_network(m, f"{target_folder}/{temp_file}")
+        # save base case as NC file
+        save_network(n, f"{target_folder}/{temp_file}")
     #
     else:
         print(f"no need to re-read energy system details from {excel_file}\n")
@@ -792,6 +745,7 @@ def read_and_update_network(
     temp_file: str,
     df_scens: pd.core.frame.DataFrame = pd.core.frame.DataFrame(),
     scenario: str = None,
+    first_call: bool = False,
 ) -> pypsa.Network:
     """
     Reads the basecase PyPSA network and adjust settings for a given scenario
@@ -807,6 +761,9 @@ def read_and_update_network(
 
     scenario:
         Name of the current scenario to adjust the PyPSA network for.
+
+    first_call:
+        Indicates if the function is called the first time or from do_all_runs function.
 
     Returns
     -------
@@ -855,9 +812,16 @@ def read_and_update_network(
                     # add all the new candidates
                     n.add(c, name=dfs.index, **dfs)
     #
-    # remove unused and/or unusable components (nom=0 & nom_max=0)
-    n = remove_unused_details(n)
     inv_periods = np.array(eval(globals()["investment_periods"]))
+    #
+    # remove unused and/or unusable components (nom=0 & nom_max=0)
+    if not first_call:
+        n = remove_unused_details(n)
+        #
+        # save network as preliminary result file
+        save_network(
+            n, f"{globals()['target_folder']}/{globals()['result_file']}_{scenario}_rev0.nc"
+        )
     #
     return n, inv_periods
 
@@ -1149,6 +1113,17 @@ def remove_unused_details(n: pypsa.Network) -> pypsa.Network:
             print(f"x) {bus}")
     else:
         print()
+    #
+    c = "Load"
+    df = n.c[c].static.index[~n.c[c].static.active]
+    if len(df) > 0:
+        n.remove("Load", df)
+        print("\nunused loads:")
+        #
+        for load in list(df):
+            print(f"x) {load}")
+    #
+    print()
     #
     return n
 
@@ -1534,6 +1509,51 @@ def do_optimization(
         Termination code of the optimization.
     """
     #
+    # check if time segmentation should be done
+    if (tsam_avail) and (eval(globals()["do_segmentation"])):
+        resolution = globals()["segmentation_hours"]
+        resolution = 2
+        hours = len(n.snapshots)
+        # calculate number of segments equivalent to resolution
+        segments = int(hours / resolution)
+        #
+        if not version.parse(PYPSA_VERSION) >= version.parse(PYPSA_VERSION_NEEDED):
+            print(
+                "\nerror! installed PyPSA version ({PYPSA_VERSION)) does not support segmentation! need at least v{PYPSA_VERSION_NEEDED}"
+            )
+            sys.exit(-1)
+        #
+        print(
+            f"use segmentation {globals()['segmentation_hours']}h steps / {segments} segments ..."
+        )
+        #
+        if globals()["segmentation_function"] == "resample":
+            print(f"segmentation function: {globals()['segmentation_function']}")
+            n2 = n.cluster.temporal.resample(f"{hours}h")
+        #
+        elif globals()["segmentation_function"] == "downsample":
+            print(f"segmentation function: {globals()['segmentation_function']}")
+            n2 = n.cluster.temporal.downsample(hours)
+        #
+        elif globals()["segmentation_function"] == "segment":
+            print(f"segmentation function: {globals()['segmentation_function']}")
+            if not n.has_periods:
+                n2 = n.cluster.temporal.segment(segments)
+            #
+            else:
+                print(
+                    'warning! network has investment periods defined, therefore switch to "resample" ...'
+                )
+                n2 = n.cluster.temporal.resample(f"{hours}h")
+        #
+        else:
+            print(
+                f"error! segmentation function: {globals()['segmentation_function']} is not defined!"
+            )
+            sys.exit(-1)
+    else:
+        n2 = n
+    #
     start_time = dt.now()
     #
     # do the investment optimization (either pathway or myopic)
@@ -1543,8 +1563,8 @@ def do_optimization(
         # start optimizing the network
         if globals()["objective_function"] == "annuity+o&m":
             print("use standard min(annuity+O&M) target function")
-            status, tc = n.optimize(
-                snapshots=n.snapshots,
+            status, tc = n2.optimize(
+                snapshots=n2.snapshots,
                 solver_name=globals()["solver_name"],
                 multi_investment_periods=False,
                 extra_functionality=extra_functionalities,
@@ -1557,8 +1577,8 @@ def do_optimization(
         #
         elif globals()["objective_function"] == "npv":
             print("use adjusted max(NPV) target function")
-            n.optimize.create_model(include_objective_constant=True)
-            m = n.model
+            n2.optimize.create_model(include_objective_constant=True)
+            m2 = n2.model
             discount_rate = globals()["discount_factor"]
             investment_years = globals()["years_of_construction"]
             operation_years = globals()["years_of_operation"]
@@ -1573,14 +1593,14 @@ def do_optimization(
             capex = 0
             comps = pypsa.descriptors.nominal_attrs
             for c in comps:
-                df = n.c[c].static
+                df = n2.c[c].static
                 #
                 if f"{comps[c]}_extendable" in df.columns:
                     mask = df[f"{comps[c]}_extendable"]
                     var_name = f"{c}-{comps[c]}"
                     #
                     if mask.any():
-                        var = m.variables[var_name].loc[mask.index[mask]]
+                        var = m2.variables[var_name].loc[mask.index[mask]]
                         capital_cost = df.loc[mask, "capital_cost"]
                         capex += (var * capital_cost).sum()
             #
@@ -1588,26 +1608,26 @@ def do_optimization(
             capex /= investment_years
             #
             opex = 0
-            weights = n.snapshot_weightings["objective"]
+            weights = n2.snapshot_weightings["objective"]
             col = "_bg_marginal_cost"
-            for c in n.branch_components | n.one_port_components:
-                if "marginal_cost" in n.c[c]["attrs"]:
-                    if c in m.variables:
-                        var = m.variables[f"{c}-p"]
-                        mc = n.df(c)["marginal_cost"]
+            for c in n2.branch_components | n2.one_port_components:
+                if "marginal_cost" in n2.c[c]["attrs"]:
+                    if c in m2.variables:
+                        var = m2.variables[f"{c}-p"]
+                        mc = n2.df(c)["marginal_cost"]
                         bg = 0
                         #
                         if col in df.cols:
-                            bg = n.df(c)["_background_cost"]
+                            bg = n2.df(c)["_background_cost"]
                         #
                         opex += ((var * (mc + bg)) * weights).sum()
             #
-            m.objective = -(opex * df_opex + capex * df_capex)
-            m.objective.sense = "max"
+            m2.objective = -(opex * df_opex + capex * df_capex)
+            m2.objective.sense = "max"
             status = "nok"
             tc = "normal"
             #
-            status, tc = n.optimize.solve_model(
+            status, tc = n2.optimize.solve_model(
                 solver_name=globals()["solver_name"],
                 multi_investment_periods=False,
                 extra_functionality=extra_functionalities,
@@ -1629,8 +1649,8 @@ def do_optimization(
         #
         for period in inv_periods:
             # limit the snapshots to the current year
-            snapshots = n.snapshots[n.snapshots.get_level_values("period") == period]
-            status, tc = n.optimize(
+            snapshots = n2.snapshots[n2.snapshots.get_level_values("period") == period]
+            status, tc = n2.optimize(
                 snapshots=snapshots,
                 multi_investment_periods=True,
                 solver_name=globals()["solver_name"],
@@ -1644,9 +1664,9 @@ def do_optimization(
             #
             # if one execution was not successful, stop it
             if status != "ok":
-                return n, status, tc
+                return n2, status, tc
             #
-            set_optimized_capacities(n, period)
+            set_optimized_capacities(n2, period)
     #
     else:
         print(
@@ -1655,10 +1675,10 @@ def do_optimization(
         sys.exit(0)
     #
     end_time = dt.now()
-    n.duration = (end_time - start_time).total_seconds()
-    print(f"optimization duration: {round(n.duration, 2)}\n")
+    n2.duration = (end_time - start_time).total_seconds()
+    print(f"optimization duration: {round(n2.duration, 2)}\n")
     #
-    return n, status, tc
+    return n2, status, tc
 
 
 def do_all_runs(
@@ -1926,7 +1946,7 @@ def link_capacities(n: pypsa.Network) -> None:
                             con = link1_cap - factor1 * link2_cap == factor2
                             con.sign = sign
                             m.add_constraints(con, name=constr_name)
-                            print(f"added constraint {constr_name}")
+                            print(f"x) added constraint {constr_name}")
                     #
                     else:
                         print(f'info! constraint "{constr_name}" is misconfigured')
@@ -1997,7 +2017,7 @@ def link_operation(n: pypsa.Network) -> None:
                         con = link1_flow - factor1 * link2_flow == factor2
                         con.sign = sign
                         m.add_constraints(con, name=constr_name)
-                        print(f"added constraint {constr_name}")
+                        print(f"x) added constraint {constr_name}")
                     #
                     else:
                         print(f'info! constraint "{constr_name}" is misconfigured')
@@ -2108,7 +2128,7 @@ def limit_hourly_operation_by_capacity(n: pypsa.Network) -> None:
             con = rhs <= link_cap
             con.sign = row.limit_op_sign
             m.add_constraints(con, name=constr_name)
-            print(f"added constraint {constr_name}")
+            print(f"x) added constraint {constr_name}")
         #
         else:
             print(f'info! constraint "{constr_name}" is misconfigured')
@@ -2173,12 +2193,12 @@ def minimum_load_if_operates(
                         dispatch >= min_pu * capacity - bigM * (1 - status),
                         name=constr_name,
                     )
-                    print(f"added constraint {constr_name}")
+                    print(f"x) added constraint {constr_name}")
                 #
                 constr_name = f"{c}-{t}-is_online_if_in_operation"
                 if constr_name not in m.constraints:
                     m.add_constraints(dispatch <= bigM * status, name=constr_name)
-                    print(f"added constraint {constr_name}")
+                    print(f"x) added constraint {constr_name}")
                 #
                 # adjust the objective function
                 m.objective -= 1.0 * status.sum()
@@ -2249,7 +2269,7 @@ def invest_if_installed(
                 constr_name = f"{c}-{t}-is_not_installed"
                 if constr_name not in m.constraints:
                     m.add_constraints(link_cap <= bigM * is_installed, name=constr_name)
-                    print(f"added constraint {constr_name}")
+                    print(f"x) added constraint {constr_name}")
                 #
                 # adjust the objective function
                 m.objective += invest * is_installed.sum()
@@ -2318,12 +2338,12 @@ def min_capacity_if_installed(
                     m.add_constraints(
                         link_cap >= min_cap * is_installed, name=constr_name
                     )
-                    print(f"added constraint {constr_name}")
+                    print(f"x) added constraint {constr_name}")
                 #
                 constr_name = f"{c}-is_not_installed-{t}"
                 if constr_name not in m.constraints:
                     m.add_constraints(link_cap <= bigM * is_installed, name=constr_name)
-                    print(f"added constraint {constr_name}")
+                    print(f"x) added constraint {constr_name}")
     #
     return None
 
@@ -2377,7 +2397,7 @@ def background_marginal_cost(
                     # adjust the objective function
                     m.objective += tech_flow.sum() * df[col][t]
                 #
-                print(f"added constraint {c}.{t}.{col}")
+                print(f"x) added constraint {c}.{t}.{col}")
     #
     return None
 
@@ -2440,7 +2460,7 @@ def shared_technology_potential(
         if type(con) is linopy.expressions.LinearExpression:
             constr_name = f"Shared-potential-{t}"
             m.add_constraints(con <= 1, name=constr_name)
-            print(f"added constraint {constr_name}")
+            print(f"x) added constraint {constr_name}")
         else:
             print(f"info! nothing to do: {con}, {t}")
     #
@@ -2500,7 +2520,7 @@ def force_technology_capacity(
                     #
                     # add the constraints
                     m.add_constraints(con2, name=constr_name)
-                    print(f"added constraint {constr_name}")
+                    print(f"x) added constraint {constr_name}")
     #
     return None
 
@@ -2546,7 +2566,7 @@ def mga_settings(
     m.add_constraints(
         objective + fixed_cost >= (1 + slack) * optimal_cost, name=constr_name
     )
-    print(f"added constraint {constr_name}")
+    print(f"x) added constraint {constr_name}")
     #
     return None
 
@@ -2825,10 +2845,10 @@ def strict_unsimultaneous_charging_discharging(
             #
             constr_name = f"{str_idx}-strict-on-charge"
             m.add_constraints(charge_p <= bigM * bin_var, name=constr_name)
-            print(f"added constraint {constr_name}")
+            print(f"x) added constraint {constr_name}")
             constr_name = f"{str_idx}-strict-on-discharge"
             m.add_constraints(discharge_p <= bigM * (one - bin_var), name=constr_name)
-            print(f"added constraint {constr_name}")
+            print(f"x) added constraint {constr_name}")
     #
     return None
 
@@ -3070,6 +3090,7 @@ def extra_functionalities(
         if eval(globals()["do_maintenance_planing"]):
             add_maintenance_constraints(n, globals()["maintenance_mode"])
     #
+    print("")
     return None
 
 
@@ -3177,6 +3198,7 @@ def main() -> None:
         f"{globals()['target_folder']}/{globals()['temp_file']}",
         pd.core.frame.DataFrame(),
         df_scens.scenario.unique()[0],
+        True,
     )
     #
     if all_adjustments_ok:
