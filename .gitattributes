@@ -1,2 +1,6 @@
+# -*- coding: utf-8 -*-
+# SPDX-FileCopyrightText: 2025-2026 markus.groissboeck@gmx.at
+# SPDX-License-Identifier: MIT
+
 # SCM syntax highlighting & preventing 3-way merges
 pixi.lock merge=binary linguist-language=YAML linguist-generated=true

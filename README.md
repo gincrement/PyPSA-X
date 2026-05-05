@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: PyPSA Contributors
+SPDX-License-Identifier: MIT
+-->
+
 # PyPSA-X - PyPSA for PtX and Microgrid projects
 
 **PyPSA-X** is an open-source Python framework for optimizing and simulating **power-to-anything
@@ -10,34 +15,34 @@
 - **Pathway Planning**,
 - **Stochastic Optimisation**,
 - **Modelling-to-Generate-Alternatives** (MGA),
-- **Static Power Flow** Analysis, and 
+- **Static Power Flow** Analysis, and
 - **Sector-Coupling**.
 
-Especially the sector-coupling feature is of interest for **PyPSA-X** which is made for project 
-developers, and industry needing an easy-to-use and transparent tool 
+Especially the sector-coupling feature is of interest for **PyPSA-X** which is made for project
+developers, and industry needing an easy-to-use and transparent tool
 for power-to-X power and energy system analysis.
 
-For further information about <ins>PyPSA</ins> please check its  extensive 
+For further information about <ins>PyPSA</ins> please check its  extensive
 [documentation](https://docs.pypsa.org) with tutorials, user guides, examples and an API reference.
 
 ## Features
 - **marginal background cost**: add marginal costs of operation towards the objective function
 without having them as part of the overall investment and operational costs;
-- **link technology operation**: link technology operation to ensure proper operation of e.g., 
+- **link technology operation**: link technology operation to ensure proper operation of e.g.,
 electrolyzers on green electricity only;
-- **limit hourly operation**: limit the hourly operation of several technology options compared 
+- **limit hourly operation**: limit the hourly operation of several technology options compared
 with another technology size (e.g., green and grey power purchase and a transformer station);
-- **link of technology capacity**: link the capacity of technologies (e.g., storage charger is 
+- **link of technology capacity**: link the capacity of technologies (e.g., storage charger is
 equal to storage discharger);
 - **shared technology potential**: limit the expansion of technologies based on a joined limitation
 (e.g., different wind turbines with a land limitation);
 - **forced technology capacity**:  force the capacity built to be above or below a certain value
 (e.g., at least 100 MW of any wind turbine technology);
-- **strict un-simultaneous operation**: make sure that 2 technology options can’t operate at the 
+- **strict un-simultaneous operation**: make sure that 2 technology options can’t operate at the
 same time (e.g., dis-/charging);
-- **minimum load if in operation**: limits the operation of a technology to a given value as 
+- **minimum load if in operation**: limits the operation of a technology to a given value as
 minimum operation, but no operation is allowed;
-- **investment if installed**: consider an investment if a technology option is selected (e.g, 
+- **investment if installed**: consider an investment if a technology option is selected (e.g,
 cost for ground preparation);
 - **minimum capacity if installed**: limits new installed capacity with a lower value, but does
 not force the installation of this capacity;
@@ -52,7 +57,7 @@ optimization for a more accurate operational behavior.
 - **consider retirement gains**: allow retirement of technology which decreases the annual
 maintenance cost;
 - **reserve margin**: adds a preliminary version of operational reserve considerations;
-- **limit operation**: option to limit the operation of e.g., emergency technology towards a 
+- **limit operation**: option to limit the operation of e.g., emergency technology towards a
 predefined number of hours (e.g., 3 h/a);
 
 ## Installation
@@ -67,7 +72,7 @@ git clone https://github.com/gincrement/PyPSA-X
 
 ### Install Python Dependencies
 **PyPSA-X** relies on a set of other Python packages to function. We manage these using **pixi**.
-Once [pixi](https://pixi.prefix.dev/latest/installation/) is installed, you can activate the 
+Once [pixi](https://pixi.prefix.dev/latest/installation/) is installed, you can activate the
 project environment for your operating system and have access to all the **PyPSA-X** dependencies
 from the command line:
 
@@ -82,9 +87,9 @@ python pypsa-x.py AB_rev1.xls
 
 This executes the **PyPSA-X** script and reads the assumption book 'AB_rev1.xls' and follows
 the configuration within the worksheets <ins>opt_params</ins>, and <ins>scen_params</ins>.
-The sheet <ins>opt_params</ins> contains options to guide the PyPSA-X script (e.g., target folder 
+The sheet <ins>opt_params</ins> contains options to guide the PyPSA-X script (e.g., target folder
 to store the results; OETC settings).
-The sheet <ins>scen_params</ins> contains options of which variables to change between the 
+The sheet <ins>scen_params</ins> contains options of which variables to change between the
 optimization of different scenarios.
 
 ## Dependencies
@@ -93,7 +98,7 @@ optimization of different scenarios.
 - [linopy](https://github.com/PyPSA/linopy) for preparing linear optimization problems;
 - [pandas](http://github.com/pandas-dev/pandas) for storing data about components and time series.
 
-**PyPSA-X** can be used with different solvers. For instance, the free solvers such as 
+**PyPSA-X** can be used with different solvers. For instance, the free solvers such as
 - [HiGHS](https://highs.dev/) (installed by default),
 - [GLPK](https://www.gnu.org/software/glpk/), and
 - [CBC](https://github.com/coin-or/Cbc/)
@@ -104,11 +109,10 @@ or commercial solvers like
 
 ## Contributing and Support
 We strongly welcome anyone interested in contributing to this project. If you have any ideas, suggestions
-or encounter problems, feel invited to file [issues](https://github.com/gincrement/PyPSA-X/issues) or 
+or encounter problems, feel invited to file [issues](https://github.com/gincrement/PyPSA-X/issues) or
 make [pull requests](https://github.com/gincrement/PyPSA-X/pulls) on GitHub.
 
 ## Licence
 Copyright [PyPSA-X Contributors]
 
 PyPSA-X is licensed under the open source [MIT License](LICENSES/MIT.txt)
-

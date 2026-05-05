@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
+# SPDX-FileCopyrightText: 2025-2026 markus.groissboeck@gmx.at
+# SPDX-License-Identifier: MIT
 
 """
 PyPSA PtX / µgrid Optimizer
 
 @author(s):
-    M. Groissbock (OET)
+    Markus Groissboeck
 
 ---
 
 MIT License
 
-Copyright (c) <year> <copyright holders>
+Copyright (c) 2025-2026 markus.groissboeck@gmx.at
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -50,7 +52,7 @@ __version__ = "0.9.3-dev"
 #
 headers = [
     f"\nPtX / µgrid Optimizer v{__version__}",
-    f"(c) 2025-{dt.now().year}",
+    f"(c) 2025-{dt.now().year} markus.groissboeck@gmx.at",
     "",
     "+" + "-" * 80 + "+",
     "| MIT License " + " " * 67 + "|",
@@ -62,10 +64,11 @@ headers = [
     "| copies of the Software, and to permit persons to whom the Software is          |",
     "| furnished to do so." + " " * 60 + "|",
     "+" + "-" * 80 + "+",
-    ""]
+    "",
+]
 #
 for header in headers:
-    print (header)
+    print(header)
 #
 # check provided arguments on the command line
 if (len(sys.argv) > 1) and (sys.argv[0] != ""):
@@ -148,14 +151,23 @@ else:
 # graph
 if find_spec("pypsa_network_viewer"):
     from pypsa_network_viewer import html_viewer
+
     network_viewer = True
 #
 else:
     network_viewer = False
 #
-if find_spec("matplotlib.pyplot") and find_spec("networkx"):
+if find_spec("matplotlib.pyplot"):
     import matplotlib.pyplot as plt
+
+    matplotlib_pyplot = True
+#
+else:
+    matplotlib_pyplot = False
+#
+if find_spec("networkx"):
     import networkx as nx
+
     networkx_viewer = True
 #
 else:
@@ -174,11 +186,13 @@ if deactivate_network_viewers:
 
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
+
 # source:
 # https://stackoverflow.com/questions/449560/how-do-i-determine-the-size-of-an-object-in-python
 def getsize(obj):
     from types import ModuleType, FunctionType
     from gc import get_referents
+
     #
     # Custom objects know their class.
     # Function objects seem to know way too much, including modules.
@@ -214,6 +228,7 @@ def getsize(obj):
 def random_string(string_length=10):
     """Returns a random string of length string_length."""
     import uuid
+
     random = str(uuid.uuid4())  # Convert UUID format to a Python string.
     random = random.upper()  # Make all characters uppercase.
     random = random.replace("-", "")  # Remove the UUID '-'.
@@ -269,6 +284,21 @@ def read_excel_data(
         n = pypsa.Network(excel_file)
         n.consistency_check()
         #
+        globals()["debug_mode"] = "False"
+        globals()["hours_to_optimize"] = 24 * 30 * 1
+        #
+        if (eval(globals()["debug_mode"])) and (globals()["hours_to_optimize"] < 8760):
+            print(
+                f"\ndebugging is enabled, therefore only {globals()['hours_to_optimize']} hours are considered in the optimization"
+            )
+            n.set_snapshots(
+                pd.date_range(
+                    f"{globals()['project_cod']}-01-01",
+                    freq="1h",
+                    periods=globals()["hours_to_optimize"],
+                )
+            )
+        #
         inv_periods = np.array(eval(globals()["investment_periods"]))
         n.set_investment_periods(inv_periods)
         inv_weightings = np.array(eval(globals()["investment_weighting"]))
@@ -278,10 +308,11 @@ def read_excel_data(
             n.investment_period_weightings.loc[year] = inv_weightings[pos]
         #
         # save base case as NC file
-        save_network(n, f"{target_folder}/{temp_file}")
+        save_network(n, f"{target_folder}", f"{temp_file}")
     #
     else:
-        print(f"no need to re-read energy system details from {excel_file}\n")
+        print(f"no need to re-read energy system details from {excel_file}")
+        print(f"NC file '{target_folder}/{temp_file}' is up-to-date\n")
     #
     return None
 
@@ -307,7 +338,7 @@ def read_all_params(
         Scenarios details to be considered.
 
     stoch_params: list
-        Stochstic optimization details to be considered.
+        Stochastic optimization details to be considered.
     """
     #
     own_sheets = ["opt_params", "scen_params", "stoch_params"]
@@ -315,8 +346,8 @@ def read_all_params(
     # define some variables
     defaults = {
         # debug settings
-        "debug_mode": "False",  # not necessary anymore, use segmentation instead
-        "hours_to_optimize": (24 * 3),  # not necessary anymore, use segmentation instead
+        "debug_mode": "False",
+        "hours_to_optimize": (24 * 3),
         # Other settings
         "target_folder": f"./run_{uuid.uuid4().hex}",
         "csv_subfolder": "csv_model",  # not necessary anymore, use Excel import instead
@@ -518,7 +549,7 @@ def get_solver_setting() -> dict:
             "solver": "choose",  # "simplex", "choose", "ipm" or "pdlp".
             # If "simplex"/"ipm"/"pdlp"; default: "choose"
             "run_crossover": "choose",  # "off", "choose" or "on"; default: "on"
-            "user_objective_scale": -4,
+            "user_objective_scale": -6,
         }
     #
     elif globals()["solver_name"] == "cplex":
@@ -555,7 +586,7 @@ def validate_scenario_adjustments(
     temp_file: str
         Name of the PyPSA network test adjustments against.
 
-    scenrios:
+    df_scens: pd.core.frame.DataFrame
         DataFrame containing the required scenario adjustments.
 
     Returns
@@ -610,7 +641,7 @@ def update_network(
     stoch_scenarios: str = None,
 ) -> pypsa.Network:
     """
-    Reads the basecase PyPSA network and adjust settings for a given scenario
+    Reads the base case PyPSA network and adjust settings for a given scenario
     based on the data in the DataFrame scenarios.
 
     Parameters
@@ -618,10 +649,10 @@ def update_network(
     n: pypsa.Network
         PyPSA network containing the initial network to optimize.
 
-    df_adjusts:
+    df_adjusts: pd.core.frame.DataFrame
         DataFrame containing the required scenario adjustments.
 
-    scenario:
+    scenario: str
         Name of the current scenario to adjust the PyPSA network for.
 
     Returns
@@ -748,7 +779,7 @@ def read_and_update_network(
     first_call: bool = False,
 ) -> pypsa.Network:
     """
-    Reads the basecase PyPSA network and adjust settings for a given scenario
+    Reads the base PyPSA network and adjust settings for a given scenario
     based on the data in the DataFrame scenarios.
 
     Parameters
@@ -756,13 +787,13 @@ def read_and_update_network(
     temp_file: str
         Name of the PyPSA network test adjustments against.
 
-    scenrios:
+    df_scens: pd.core.frame.DataFrame
         DataFrame containing the required scenario adjustments.
 
-    scenario:
+    scenario: str
         Name of the current scenario to adjust the PyPSA network for.
 
-    first_call:
+    first_call: bool
         Indicates if the function is called the first time or from do_all_runs function.
 
     Returns
@@ -783,8 +814,8 @@ def read_and_update_network(
     if eval(globals()["modular_representation"]):
         # loop through all components
         for c in comps:
-            # >> Exclude Line and Transformer as the power flow implementation in
-            #    PyPSA can't deal with extendable line and transformer components
+            # >> Exclude Line, Transformer, and StorageUnits as PyPSA's power flow
+            #    implementation can't deal with extendable-units in this components
             if c not in ["Line", "Transformer", "StorageUnit"]:
                 attr = comps[c]
                 df = n.c[c].static.query(f"{attr}_{col} > 0")
@@ -820,7 +851,9 @@ def read_and_update_network(
         #
         # save network as preliminary result file
         save_network(
-            n, f"{globals()['target_folder']}/{globals()['result_file']}_{scenario}_rev0.nc"
+            n,
+            f"{globals()['target_folder']}",
+            f"{globals()['result_file']}_{scenario}_rev0.nc",
         )
     #
     return n, inv_periods
@@ -828,6 +861,7 @@ def read_and_update_network(
 
 def save_network(
     n: pypsa.Network,
+    path_name: str,
     file_name: str,
 ) -> None:
     """
@@ -838,6 +872,9 @@ def save_network(
     n: pypsa.Network
         PyPSA network to save into the NetCDF file.
 
+    path_name: str
+        Path name to save the PyPSA network into.
+
     file_name: str
         File name to save the PyPSA network into.
 
@@ -846,13 +883,45 @@ def save_network(
     None
     """
     #
-    print(f'save PyPSA network as "{file_name}"')
+    nc_file = f"{path_name}/{file_name}"
+    print(f'save PyPSA network as "{nc_file}"')
     # delete target file if exists
-    if os.path.exists(file_name):
-        os.remove(file_name)
+    if os.path.exists(nc_file):
+        os.remove(nc_file)
     #
     # save the result
-    n.export_to_netcdf(file_name)
+    n.export_to_netcdf(nc_file)
+    #
+    is_solved = type(n.model) is not type(None)
+    if is_solved and n.model.status == "optimal" and matplotlib_pyplot:
+        print("optimization succeeded, now creating summaries...\n")
+        n.statistics.capex().droplevel(0).sort_values().plot.barh()
+        plt.savefig(
+            f"{path_name}/capex_breakdown_{file_name.split('.')[0]}.png",
+            bbox_inches="tight",
+        )
+        n.statistics.opex().droplevel(0).sort_values().plot.barh()
+        plt.savefig(
+            f"{path_name}/opex_breakdown_{file_name.split('.')[0]}.png",
+            bbox_inches="tight",
+        )
+        n.statistics.capacity().droplevel(0).sort_values().plot.barh()
+        plt.savefig(
+            f"{path_name}/capacity_breakdown_{file_name.split('.')[0]}.png",
+            bbox_inches="tight",
+        )
+        #
+        # Select timeframe
+        start, end = "2025-01-01", "2025-01-07"
+        n.generators_t.p.loc[start:end].groupby(
+            n.generators.carrier, axis=1
+        ).sum().plot.area(figsize=(12, 6))
+        plt.ylabel("Power Output [MW]")
+        plt.title("Dispatch by Carrier")
+        plt.savefig(
+            f"{path_name}/dispatch_by_carrier_{file_name.split('.')[0]}.png",
+            bbox_inches="tight",
+        )
     #
     return None
 
@@ -1083,7 +1152,7 @@ def remove_unused_details(n: pypsa.Network) -> pypsa.Network:
     print("\nremove unused technologies:")
     #
     for t in unused:
-        print(f"x) {t}")
+        print(f"x) {t.to_list()}")
     #
     # remove unused buses
     df1 = pd.Series()
@@ -1111,14 +1180,14 @@ def remove_unused_details(n: pypsa.Network) -> pypsa.Network:
         #
         for bus in list(df):
             print(f"x) {bus}")
-    else:
-        print()
+    #
+    print()
     #
     c = "Load"
     df = n.c[c].static.index[~n.c[c].static.active]
     if len(df) > 0:
         n.remove("Load", df)
-        print("\nunused loads:")
+        print("unused loads:")
         #
         for load in list(df):
             print(f"x) {load}")
@@ -1229,7 +1298,9 @@ def create_summaries(
     #
     # save results as a NC file
     save_network(
-        n, f"{globals()['target_folder']}/{globals()['result_file']}_{scenario}.nc"
+        n,
+        f"{globals()['target_folder']}",
+        f"{globals()['result_file']}_{scenario}.nc",
     )
     #
     if n.has_scenarios:
@@ -1309,7 +1380,7 @@ def create_summaries(
     #
     df = (
         pd.DataFrame(n.statistics.energy_balance(nice_names=False))
-        .groupby(level=levels, axis=0)
+        .groupby(level=levels)
         .mean()
     )
     df.columns = [scenario]
@@ -1322,9 +1393,7 @@ def create_summaries(
         levels = [0, 1]
     #
     df = (
-        pd.DataFrame(n.statistics.supply(nice_names=False))
-        .groupby(level=levels, axis=0)
-        .mean()
+        pd.DataFrame(n.statistics.supply(nice_names=False)).groupby(level=levels).mean()
     )
     df.columns = [scenario]
     list_balances.append(df)
@@ -1337,7 +1406,7 @@ def create_summaries(
     #
     df = (
         pd.DataFrame(n.statistics.curtailment(nice_names=False))
-        .groupby(level=levels, axis=0)
+        .groupby(level=levels)
         .mean()
     )
     df.columns = [scenario]
@@ -1509,10 +1578,12 @@ def do_optimization(
         Termination code of the optimization.
     """
     #
+    globals()["do_segmentation"] = "True"
+    globals()["segmentation_hours"] = 24
+    #
     # check if time segmentation should be done
     if (tsam_avail) and (eval(globals()["do_segmentation"])):
         resolution = globals()["segmentation_hours"]
-        resolution = 2
         hours = len(n.snapshots)
         # calculate number of segments equivalent to resolution
         segments = int(hours / resolution)
@@ -1529,30 +1600,28 @@ def do_optimization(
         #
         if globals()["segmentation_function"] == "resample":
             print(f"segmentation function: {globals()['segmentation_function']}")
-            n2 = n.cluster.temporal.resample(f"{hours}h")
+            n.cluster.temporal.resample(f"{hours}h")
         #
         elif globals()["segmentation_function"] == "downsample":
             print(f"segmentation function: {globals()['segmentation_function']}")
-            n2 = n.cluster.temporal.downsample(hours)
+            n.cluster.temporal.downsample(hours)
         #
         elif globals()["segmentation_function"] == "segment":
             print(f"segmentation function: {globals()['segmentation_function']}")
             if not n.has_periods:
-                n2 = n.cluster.temporal.segment(segments)
+                n.cluster.temporal.segment(segments)
             #
             else:
                 print(
                     'warning! network has investment periods defined, therefore switch to "resample" ...'
                 )
-                n2 = n.cluster.temporal.resample(f"{hours}h")
+                n.cluster.temporal.resample(f"{hours}h")
         #
         else:
             print(
-                f"error! segmentation function: {globals()['segmentation_function']} is not defined!"
+                f"error! undefined segmentation_function '{globals()['segmentation_function']}'"
             )
             sys.exit(-1)
-    else:
-        n2 = n
     #
     start_time = dt.now()
     #
@@ -1563,8 +1632,8 @@ def do_optimization(
         # start optimizing the network
         if globals()["objective_function"] == "annuity+o&m":
             print("use standard min(annuity+O&M) target function")
-            status, tc = n2.optimize(
-                snapshots=n2.snapshots,
+            status, tc = n.optimize(
+                snapshots=n.snapshots,
                 solver_name=globals()["solver_name"],
                 multi_investment_periods=False,
                 extra_functionality=extra_functionalities,
@@ -1577,8 +1646,8 @@ def do_optimization(
         #
         elif globals()["objective_function"] == "npv":
             print("use adjusted max(NPV) target function")
-            n2.optimize.create_model(include_objective_constant=True)
-            m2 = n2.model
+            n.optimize.create_model(include_objective_constant=True)
+            m = n.model
             discount_rate = globals()["discount_factor"]
             investment_years = globals()["years_of_construction"]
             operation_years = globals()["years_of_operation"]
@@ -1593,14 +1662,14 @@ def do_optimization(
             capex = 0
             comps = pypsa.descriptors.nominal_attrs
             for c in comps:
-                df = n2.c[c].static
+                df = n.c[c].static
                 #
                 if f"{comps[c]}_extendable" in df.columns:
                     mask = df[f"{comps[c]}_extendable"]
                     var_name = f"{c}-{comps[c]}"
                     #
                     if mask.any():
-                        var = m2.variables[var_name].loc[mask.index[mask]]
+                        var = m.variables[var_name].loc[mask.index[mask]]
                         capital_cost = df.loc[mask, "capital_cost"]
                         capex += (var * capital_cost).sum()
             #
@@ -1608,26 +1677,26 @@ def do_optimization(
             capex /= investment_years
             #
             opex = 0
-            weights = n2.snapshot_weightings["objective"]
+            weights = n.snapshot_weightings["objective"]
             col = "_bg_marginal_cost"
-            for c in n2.branch_components | n2.one_port_components:
-                if "marginal_cost" in n2.c[c]["attrs"]:
-                    if c in m2.variables:
-                        var = m2.variables[f"{c}-p"]
-                        mc = n2.df(c)["marginal_cost"]
+            for c in n.branch_components | n.one_port_components:
+                if "marginal_cost" in n.c[c]["attrs"]:
+                    if c in m.variables:
+                        var = m.variables[f"{c}-p"]
+                        mc = n.df(c)["marginal_cost"]
                         bg = 0
                         #
                         if col in df.cols:
-                            bg = n2.df(c)["_background_cost"]
+                            bg = n.df(c)["_background_cost"]
                         #
                         opex += ((var * (mc + bg)) * weights).sum()
             #
-            m2.objective = -(opex * df_opex + capex * df_capex)
-            m2.objective.sense = "max"
+            m.objective = -(opex * df_opex + capex * df_capex)
+            m.objective.sense = "max"
             status = "nok"
             tc = "normal"
             #
-            status, tc = n2.optimize.solve_model(
+            status, tc = n.optimize.solve_model(
                 solver_name=globals()["solver_name"],
                 multi_investment_periods=False,
                 extra_functionality=extra_functionalities,
@@ -1649,8 +1718,8 @@ def do_optimization(
         #
         for period in inv_periods:
             # limit the snapshots to the current year
-            snapshots = n2.snapshots[n2.snapshots.get_level_values("period") == period]
-            status, tc = n2.optimize(
+            snapshots = n.snapshots[n.snapshots.get_level_values("period") == period]
+            status, tc = n.optimize(
                 snapshots=snapshots,
                 multi_investment_periods=True,
                 solver_name=globals()["solver_name"],
@@ -1664,9 +1733,9 @@ def do_optimization(
             #
             # if one execution was not successful, stop it
             if status != "ok":
-                return n2, status, tc
+                return n, status, tc
             #
-            set_optimized_capacities(n2, period)
+            set_optimized_capacities(n, period)
     #
     else:
         print(
@@ -1675,10 +1744,10 @@ def do_optimization(
         sys.exit(0)
     #
     end_time = dt.now()
-    n2.duration = (end_time - start_time).total_seconds()
-    print(f"optimization duration: {round(n2.duration, 2)}\n")
+    n.duration = (end_time - start_time).total_seconds()
+    print(f"optimization duration: {round(n.duration, 2)}\n")
     #
-    return n2, status, tc
+    return n, status, tc
 
 
 def do_all_runs(
@@ -2669,9 +2738,9 @@ def reserve_constraints(
             if eval(globals()['rm_max_generator']):
                 constr_name = f'{c}-sum_of_reserves-largest_unit'
                 m.add_constraints(
-                    # v_rp.sum('name') >= n_reserve.static.generators.p_nom.max(), 
+                    # v_rp.sum('name') >= n_reserve.static.generators.p_nom.max(),
                     c = 'Generator'
-                    v_rp.sum('name') >= n.c[c].static.p_nom.max() * 1, 
+                    v_rp.sum('name') >= n.c[c].static.p_nom.max() * 1,
                     name=constr_name)
             """
             #
@@ -3180,9 +3249,12 @@ def main() -> None:
     #
     # get the active scenarios only
     unique_scens = df_scens.sort_values("scenario").scenario.unique()
-    print(f"{len(unique_scens)} active scenario(s) (ordered by name):")
-    print(f"{list(unique_scens)}\n")
-    print(f"{len(df_scens)} active lines for scenario adjustments:\n", df_scens)
+    print(
+        f"{len(unique_scens)} active scenario(s) (ordered by name): {list(unique_scens)}\n"
+    )
+    print(
+        f"{len(df_scens)} active lines for scenario adjustments:\n{df_scens.to_string(index=False)}"
+    )
     #
     if eval(globals()["run_stochastic_runs"]):
         print(f"{len(df_stochs)} active lines for stochastic adjustments:\n", df_stochs)

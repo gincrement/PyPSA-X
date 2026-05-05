@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
+# SPDX-FileCopyrightText: 2025-2026 markus.groissboeck@gmx.at
+# SPDX-License-Identifier: MIT
+
 # Ignore All (xlsx) files
 *.xlsx
 *.xlsm
 
-# ignore directories
-.idea
-run_*
 # pixi environments
 .pixi/*
 !.pixi/config.toml
@@ -12,3 +13,7 @@ run_*
 # special files and directories
 pypsa-ptx.py
 _ignore/*
+cache/*
+.idea
+run_*/*
+gurobi.lic
