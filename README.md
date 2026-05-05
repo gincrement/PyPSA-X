@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: PyPSA Contributors
+SPDX-FileCopyrightText: PyPSA-X Contributors
 SPDX-License-Identifier: MIT
 -->
 
