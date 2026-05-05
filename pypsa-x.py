@@ -284,9 +284,6 @@ def read_excel_data(
         n = pypsa.Network(excel_file)
         n.consistency_check()
         #
-        globals()["debug_mode"] = "False"
-        globals()["hours_to_optimize"] = 24 * 30 * 1
-        #
         if (eval(globals()["debug_mode"])) and (globals()["hours_to_optimize"] < 8760):
             print(
                 f"\ndebugging is enabled, therefore only {globals()['hours_to_optimize']} hours are considered in the optimization"
