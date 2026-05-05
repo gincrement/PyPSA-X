@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: 2025-2026 markus.groissboeck@gmx.at
+# SPDX-FileCopyrightText: PyPSA-X Contributors
 # SPDX-License-Identifier: MIT
 
 """
 PyPSA PtX / µgrid Optimizer
 
-@author(s):
-    Markus Groissboeck
+@author(s) / distributor(s):
+    markus.groissboeck@gmx.at
 
 ---
 
