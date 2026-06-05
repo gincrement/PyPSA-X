@@ -3,7 +3,17 @@
 # SPDX-License-Identifier: MIT
 
 """
-PyPSA PtX / µgrid Optimizer
+
+  pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx
+ pp    pp   yy     yy   pp    pp  ss              aa      xx  xx
+ pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx
+ pp    pp     yy yy     pp    pp        ss  aa    aa      xx  xx
+ ppppppp       yyy      ppppppp    ssssss    aaaaaa      xx    xx
+ pp            yy       pp
+ pp           yy        pp
+ pp          yy         pp
+
+ PyPSA PtX / µgrid Optimizer
 
 @author(s) / distributor(s):
     markus.groissboeck@gmx.at
@@ -51,6 +61,16 @@ default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xls"
 __version__ = "0.9.3-dev"
 #
 headers = [
+    "",
+    " pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx",
+    "pp    pp   yy     yy   pp    pp  ss              aa      xx  xx ",
+    "pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx  ",
+    "pp    pp     yy yy     pp    pp        ss  aa    aa      xx  xx ",
+    "ppppppp       yyy      ppppppp    ssssss    aaaaaa      xx    xx",
+    "pp            yy       pp ",
+    "pp           yy        pp ",
+    "pp          yy         pp ",
+    "",
     f"\nPtX / µgrid Optimizer v{__version__}",
     f"(c) 2025-{dt.now().year} markus.groissboeck@gmx.at",
     "",
