@@ -3,16 +3,6 @@ SPDX-FileCopyrightText: PyPSA-X Contributors
 SPDX-License-Identifier: MIT
 -->
 
-  pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx
- pp    pp   yy     yy   pp    pp  ss              aa      xx  xx
- pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx
- pp    pp     yy yy     pp    pp        ss  aa    aa      xx  xx
- ppppppp       yyy      ppppppp    ssssss    aaaaaa      xx    xx
- pp            yy       pp
- pp           yy        pp
- pp          yy         pp
-
-
 # PyPSA-X - PyPSA for PtX and micro-grid (µ-grid) projects
 
 **PyPSA-X** is an open-source Python framework for optimizing and simulating **power-to-anything
