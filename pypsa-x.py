@@ -4,6 +4,8 @@
 
 """
 
+ PyPSA PtX / µgrid Optimizer
+
   pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx
  pp    pp   yy     yy   pp    pp  ss              aa      xx  xx
  pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx
@@ -12,8 +14,6 @@
  pp            yy       pp
  pp           yy        pp
  pp          yy         pp
-
- PyPSA PtX / µgrid Optimizer
 
 @author(s) / distributor(s):
     markus.groissboeck@gmx.at
@@ -62,6 +62,7 @@ __version__ = "0.9.3-dev"
 #
 headers = [
     "",
+    "",
     " pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx",
     "pp    pp   yy     yy   pp    pp  ss              aa      xx  xx ",
     "pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx  ",
@@ -71,8 +72,9 @@ headers = [
     "pp           yy        pp ",
     "pp          yy         pp ",
     "",
-    f"\nPtX / µgrid Optimizer v{__version__}",
-    f"(c) 2025-{dt.now().year} markus.groissboeck@gmx.at",
+    "",
+    f"PtX / µgrid Optimizer v{__version__}",
+    f"(c) 2025-{dt.now().year} by PyPSA-X Contributors",
     "",
     "+" + "-" * 80 + "+",
     "| MIT License " + " " * 67 + "|",
@@ -110,7 +112,6 @@ if not os.path.exists(excel_filename):
 #
 deactivate_network_viewers = True
 #
-# optional packages are related to optional HTML network viewer and SVG result graph
 if find_spec("pypsa"):
     import re
     from packaging import version
@@ -133,6 +134,7 @@ if find_spec("pypsa"):
     PYPSA_VERSION = importlib.metadata.version("pypsa")
     PYPSA_V1 = bool(re.match(r"^1\.\d", PYPSA_VERSION))
     PYPSA_VERSION_NEEDED = "1.1.0"  # for tsam feature
+    HIGHS_VERSION = importlib.metadata.version("highspy")
     #
     # make sure to use the new API
     pypsa.options.api.new_components_api = True
@@ -162,7 +164,9 @@ if find_spec("pypsa"):
     logging.basicConfig(level=logging.ERROR)
     #
     print("imported all necessary libraries")
-    #
+    print(f"PyPSA: v{PYPSA_VERSION}")
+    print(f"HIGHS: v{HIGHS_VERSION}")
+#
 else:
     print("error! PyPSA is not installed\n")
     sys.exit(-1)
@@ -209,6 +213,7 @@ if deactivate_network_viewers:
 
 # source:
 # https://stackoverflow.com/questions/449560/how-do-i-determine-the-size-of-an-object-in-python
+#
 def getsize(obj):
     from types import ModuleType, FunctionType
     from gc import get_referents
@@ -241,7 +246,6 @@ def getsize(obj):
     return size
 
 
-#
 # source:
 # https://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits/23728630#23728630
 #
