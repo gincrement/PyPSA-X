@@ -15,14 +15,11 @@
  pp           yy        pp
  pp          yy         pp
 
-@author(s) / distributor(s):
-    markus.groissboeck@gmx.at
-
 ---
 
 MIT License
 
-Copyright (c) 2025-2026 markus.groissboeck@gmx.at
+Copyright (c) 2025-2026, PyPSA-X Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,

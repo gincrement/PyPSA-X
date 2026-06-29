@@ -1,10 +1,6 @@
-# -*- coding: utf-8 -*-
-# SPDX-FileCopyrightText: PyPSA-X Contributors
-# SPDX-License-Identifier: MIT
-
 [workspace]
 authors = ["Markus Groissböck <markus.groissboeck@gmx.at>"]
-channels = ["conda-forge", "gurobi"]
+channels = ["conda-forge"]
 name = "PyPSA-X"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -12,35 +8,17 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-pypsa = ">=1.2.3,<2"
-tsam = ">=3.3.0,<4"
-grpcio = ">=1.80.0,<2"
-openpyxl = ">=3.1.5,<4"
-pandas = ">=3.0.1,<4"
-highspy = ">=1.13.1,<2"
-linopy = ">=0.7.0,<0.8"
-xlrd = ">=2.0.2,<3"
-numpy = ">=2.4.3,<3"
-python-calamine = ">=0.6.1,<0.7"
-codespell = ">=2.4.2,<3"
-pre-commit = ">=4.5.1,<5"
-ruff = ">=0.15.5,<0.16"
-numpy-financial = ">=1.0.0,<2"
-gurobi = ">=13.0.1,<14"
-pyrosm = ">=0.6.2,<0.7"
-osmnx = ">=2.1.0,<3"
-openmeteo_requests = ">=1.7.5,<2"
-requests_cache = ">=0.4.13,<0.5"
-geopy = ">=2.4.1,<3"
-cartopy = ">=0.25.0,<0.26"
-jupyter = ">=1.1.1,<2"
-jupyterlab = ">=4.5.6,<5"
-sqlalchemy = ">=2.0.49,<3"
-seaborn = ">=0.13.2,<0.14"
-jupyter_contrib_nbextensions = ">=0.7.0,<0.8"
-dash = ">=4.1.0,<5"
-dash-leaflet = ">=1.0.15,<2"
-dash-mantine-components = ">=2.6.1,<3"
-dash-ag-grid = ">=33.3.3,<34"
-dash-bootstrap-components = ">=2.0.4,<3"
+pypsa = ">=1.2.4,<2"
+tsam = ">=3.4.1,<4"
+atlite = ">=0.6.1,<0.7"
 highs = ">=1.14.0,<2"
+highspy = ">=1.14.0,<2"
+xlrd = ">=2.0.2,<3"
+openpyxl = ">=3.1.5,<4"
+python = "==3.12.13"
+cdsapi = ">=0.7.7,<0.8"
+salib = ">=1.5.2,<2"
+google-cloud-storage = ">=3.12.0,<4"
+requests = ">=2.34.2,<3"
+linopy = ">=0.7.0,<0.8"
+pre_commit = ">=4.6.0,<5"
