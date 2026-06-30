@@ -162,7 +162,7 @@ if find_spec("pypsa"):
     #
     print("imported all necessary libraries")
     print(f"PyPSA: v{PYPSA_VERSION}")
-    print(f"HIGHS: v{HIGHS_VERSION}")
+    print(f"HiGHS: v{HIGHS_VERSION}")
 #
 else:
     print("error! PyPSA is not installed\n")

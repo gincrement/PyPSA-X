@@ -22,3 +22,7 @@ google-cloud-storage = ">=3.12.0,<4"
 requests = ">=2.34.2,<3"
 linopy = ">=0.7.0,<0.8"
 pre_commit = ">=4.6.0,<5"
+python-calamine = ">=0.6.1,<0.7"
+
+[pypi-dependencies]
+pypsa = { version = "*", extras = ["excel"] }
