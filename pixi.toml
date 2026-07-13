@@ -23,6 +23,7 @@ requests = ">=2.34.2,<3"
 linopy = ">=0.7.0,<0.8"
 pre_commit = ">=4.6.0,<5"
 python-calamine = ">=0.6.1,<0.7"
+pandas = "==2.3.3"
 
 [pypi-dependencies]
 pypsa = { version = "*", extras = ["excel"] }

@@ -6,11 +6,11 @@
 
  PyPSA PtX / µgrid Optimizer
 
-  pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx
- pp    pp   yy     yy   pp    pp  ss              aa      xx  xx
- pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx
- pp    pp     yy yy     pp    pp        ss  aa    aa      xx  xx
- ppppppp       yyy      ppppppp    ssssss    aaaaaa      xx    xx
+  pppppp   yy       yy   pppppp    ssssss    aaaaaa        xx    xx
+ pp    pp   yy     yy   pp    pp  ss              aa        xx  xx
+ pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  ---    xxxx
+ pp    pp     yy yy     pp    pp        ss  aa    aa        xx  xx
+ ppppppp       yyy      ppppppp    ssssss    aaaaaa        xx    xx
  pp            yy       pp
  pp           yy        pp
  pp          yy         pp
@@ -54,17 +54,17 @@ else:
     print("error! PyPSA is not installed\n")
     sys.exit(-1)
 #
-default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xls"
+default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xlsx"
 __version__ = "0.9.3-dev"
 #
 headers = [
     "",
     "",
-    " pppppp   yy       yy   pppppp    ssssss    aaaaaa      xx    xx",
-    "pp    pp   yy     yy   pp    pp  ss              aa      xx  xx ",
-    "pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  -    xxxx  ",
-    "pp    pp     yy yy     pp    pp        ss  aa    aa      xx  xx ",
-    "ppppppp       yyy      ppppppp    ssssss    aaaaaa      xx    xx",
+    " pppppp   yy       yy   pppppp    ssssss    aaaaaa        xx    xx",
+    "pp    pp   yy     yy   pp    pp  ss              aa        xx  xx ",
+    "pp    pp    yy   yy    pp    pp   ssssss   aaaaaaaa  ---    xxxx  ",
+    "pp    pp     yy yy     pp    pp        ss  aa    aa        xx  xx ",
+    "ppppppp       yyy      ppppppp    ssssss    aaaaaa        xx    xx",
     "pp            yy       pp ",
     "pp           yy        pp ",
     "pp          yy         pp ",
@@ -95,8 +95,8 @@ if (len(sys.argv) > 1) and (sys.argv[0] != ""):
         excel_filename = sys.argv[1]
     #
     else:
-        print(f"error! provided XLSX file does not exist: {sys.argv[1]}\n")
-        print(f"fallback to default XLSX file: {default_excel_filename}\n")
+        print(f'error! provided input file does not exist: "{sys.argv[1]}"')
+        print(f'fallback to default input file: "{default_excel_filename}"\n')
         excel_filename = default_excel_filename
 #
 else:
@@ -104,7 +104,8 @@ else:
 #
 # check if the Excel file exists
 if not os.path.exists(excel_filename):
-    print(f'error! the provided input file "{excel_filename}" does not exist\n')
+    print(f'error! the provided input file does not exist "{excel_filename}"')
+    print("use of pypsa-x:\n$ python pypsa-x <path_to_excel_file>\n")
     sys.exit(-1)
 #
 deactivate_network_viewers = True
@@ -1542,13 +1543,24 @@ def show_case_comparison(
             df.insert(col_pos, new_col, 0)
             #
             for index, row in df.iterrows():
-                if (df[next_col].loc[index] != "-") and (df[col].loc[index] != "-"):
-                    df[new_col].loc[index] = (
-                        df[col].loc[index] / df[next_col].loc[index]
-                    )
-                #
-                else:
-                    df[new_col].loc[index] = "-"
+                if index != "_":
+                    if (
+                        (df[next_col].loc[index] != "-")
+                        and (df[col].loc[index] != "-")
+                        and (df[next_col].loc[index] != 0)
+                        and (df[col].loc[index] != 0)
+                    ):
+                        try:
+                            df[new_col].loc[index] = (
+                                df[col].loc[index] / df[next_col].loc[index]
+                            )
+                        except ZeroDivisionError:
+                            print(
+                                f"error! cannot calculate ratio for {index} ({next_col} / {col}): {df[col].loc[index]} / {df[next_col].loc[index]}"
+                            )
+                    #
+                    # else:
+                    #    df[new_col].loc[index] = "-"
             #
             next_col = col
             df_col = df_col + 1
@@ -2824,7 +2836,7 @@ def limit_operation_of_emergency_technology(
                 # loop through available years
                 for y in n.snapshots.to_frame().period.unique():
                     constr_name = f"{c}-{t}-limit_hours_of_op-{y}"
-                    if constr_name not in m.constraints:
+                    if constr_name not in m.constraints and abs(row[col]) != np.inf:
                         m.add_constraints(
                             status.loc[y].sum() <= float(row[col]), name=constr_name
                         )
@@ -3307,7 +3319,9 @@ def main() -> None:
                 list_results, list_supplies, list_balances, list_curtailments
             )
             #
-            df.to_excel(f"{globals()['target_folder']}/run_comparison.xlsx")
+            df.to_excel(
+                f"{globals()['target_folder']}/run_comparison.xlsx", engine="openpyxl"
+            )
         #
         else:
             df = pd.DataFrame()
