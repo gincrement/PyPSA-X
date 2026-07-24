@@ -1448,6 +1448,7 @@ def create_summaries(
     return list_results, list_supplies, list_balances, list_curtailments
 
 
+# TODO replaced by n.optimize.fix_optimal_capacities() ...
 def set_optimized_capacities(
     n: pypsa.Network,
     period: int = 0,
@@ -1765,7 +1766,8 @@ def do_optimization(
             if status != "ok":
                 return n, status, tc
             #
-            set_optimized_capacities(n, period)
+            n.optimize.fix_optimal_capacities()
+            # set_optimized_capacities(n, period)
     #
     else:
         print(

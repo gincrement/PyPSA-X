@@ -264,7 +264,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/iniconfig-2.3.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/jinja2-3.1.6-pyhcf101f3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/joblib-1.5.3-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.7.0-pyhc364b38_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.8.0-pyhc364b38_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/locket-1.0.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/mapclassify-2.10.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/multiurl-0.3.9-pyhd8ed1ab_0.conda
@@ -4694,9 +4694,9 @@ packages:
   run_exports: {}
   size: 226448
   timestamp: 1765794135253
-- conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.7.0-pyhc364b38_1.conda
-  sha256: 7889e706f85f7fa45a7e682d4c355302264b6b989f91649d2ab0ffb11b7a9845
-  md5: 0f03711954c7b5de559fcb610c910d60
+- conda: https://conda.anaconda.org/conda-forge/noarch/linopy-0.8.0-pyhc364b38_0.conda
+  sha256: d4533ac3c694a8e0fc6034fe588784da7dd40ea972a369a9847ce927444aaf5c
+  md5: b31f977eb05161665ccab866d83e14de
   depends:
   - python >=3.11
   - numpy
@@ -4716,8 +4716,8 @@ packages:
   purls:
   - pkg:pypi/linopy?source=hash-mapping
   run_exports: {}
-  size: 126106
-  timestamp: 1779389046932
+  size: 155907
+  timestamp: 1784282512559
 - conda: https://conda.anaconda.org/conda-forge/noarch/locket-1.0.0-pyhd8ed1ab_0.tar.bz2
   sha256: 9afe0b5cfa418e8bdb30d8917c5a6cec10372b037924916f1f85b9f4899a67a6
   md5: 91e27ef3d05cc772ce627e51cff111c4
