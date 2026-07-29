@@ -111,7 +111,6 @@ if not os.path.exists(excel_filename):
 deactivate_network_viewers = True
 #
 if find_spec("pypsa"):
-    import re
     from packaging import version
     import importlib
     import sys
@@ -130,19 +129,21 @@ if find_spec("pypsa"):
 
     #
     PYPSA_VERSION = importlib.metadata.version("pypsa")
-    PYPSA_V1 = bool(re.match(r"^1\.\d", PYPSA_VERSION))
     PYPSA_VERSION_NEEDED = "1.1.0"  # for tsam feature
+    LINOPY_VERSION = importlib.metadata.version("linopy")
     HIGHS_VERSION = importlib.metadata.version("highspy")
     #
     # make sure to use the new API
     pypsa.options.api.new_components_api = True
     pypsa.options.set_option("params.statistics.nice_names", False)
+    pypsa.options.set_option("params.statistics.drop_zero", True)
     pypsa.options.set_option("params.statistics.round", 2)
     pypsa.options.set_option("debug.runtime_verification", False)
     #
-    if version.parse(PYPSA_VERSION) < version.parse("1.0.0"):
+    if version.parse(PYPSA_VERSION) < version.parse(PYPSA_VERSION_NEEDED):
         print(
-            "\nerror! installed PyPSA version ({PYPSA_VERSION)) not supported! need at least v1.0.0"
+            f"\nerror! installed PyPSA version ({PYPSA_VERSION}) not supported!"
+            f" need at least v{PYPSA_VERSION_NEEDED}"
         )
         sys.exit(-1)
     #
@@ -163,6 +164,7 @@ if find_spec("pypsa"):
     #
     print("imported all necessary libraries")
     print(f"PyPSA: v{PYPSA_VERSION}")
+    print(f"linopy: v{LINOPY_VERSION}")
     print(f"HiGHS: v{HIGHS_VERSION}")
 #
 else:
@@ -914,17 +916,17 @@ def save_network(
     is_solved = type(n.model) is not type(None)
     if is_solved and n.model.status == "optimal" and matplotlib_pyplot:
         print("optimization succeeded, now creating summaries...\n")
-        n.statistics.capex().droplevel(0).sort_values().plot.barh()
+        n.statistics.capex().dropna().droplevel(0).sort_values().plot.barh()
         plt.savefig(
             f"{path_name}/capex_breakdown_{file_name.split('.')[0]}.png",
             bbox_inches="tight",
         )
-        n.statistics.opex().droplevel(0).sort_values().plot.barh()
+        n.statistics.opex().dropna().droplevel(0).sort_values().plot.barh()
         plt.savefig(
             f"{path_name}/opex_breakdown_{file_name.split('.')[0]}.png",
             bbox_inches="tight",
         )
-        n.statistics.capacity().droplevel(0).sort_values().plot.barh()
+        n.statistics.capacity().dropna().droplevel(0).sort_values().plot.barh()
         plt.savefig(
             f"{path_name}/capacity_breakdown_{file_name.split('.')[0]}.png",
             bbox_inches="tight",
@@ -1361,10 +1363,7 @@ def create_summaries(
     data.append(
         [
             "__totex(mn)",
-            (
-                n.statistics.opex(nice_names=False).sum().sum()
-                + n.statistics.capex(nice_names=False).sum().sum()
-            )
+            (n.statistics.opex().sum().sum() + n.statistics.capex().sum().sum())
             / 1e6
             / no_cases,
         ]
@@ -1372,13 +1371,13 @@ def create_summaries(
     data.append(
         [
             "___capex(mn)",
-            (n.statistics.capex(nice_names=False).sum().sum()) / 1e6 / no_cases,
+            (n.statistics.capex().sum().sum()) / 1e6 / no_cases,
         ]
     )
     data.append(
         [
             "___opex(mn)",
-            (n.statistics.opex(nice_names=False).sum().sum()) / 1e6 / no_cases,
+            (n.statistics.opex().sum().sum()) / 1e6 / no_cases,
         ]
     )
     #
@@ -1398,7 +1397,7 @@ def create_summaries(
         levels = [0, 1]
     #
     df = (
-        pd.DataFrame(n.statistics.energy_balance(nice_names=False))
+        pd.DataFrame(n.statistics.energy_balance().dropna())
         .groupby(level=levels)
         .mean()
     )
@@ -1411,9 +1410,7 @@ def create_summaries(
     else:
         levels = [0, 1]
     #
-    df = (
-        pd.DataFrame(n.statistics.supply(nice_names=False)).groupby(level=levels).mean()
-    )
+    df = pd.DataFrame(n.statistics.supply().dropna()).groupby(level=levels).mean()
     df.columns = [scenario]
     list_balances.append(df)
     #
@@ -1423,11 +1420,7 @@ def create_summaries(
     else:
         levels = [0, 1]
     #
-    df = (
-        pd.DataFrame(n.statistics.curtailment(nice_names=False))
-        .groupby(level=levels)
-        .mean()
-    )
+    df = pd.DataFrame(n.statistics.curtailment().dropna()).groupby(level=levels).mean()
     df.columns = [scenario]
     list_curtailments.append(df)
     #
@@ -1837,7 +1830,7 @@ def do_all_runs(
     #
     for scenario in df_scens.scenario.unique():
         print("-" * 40 + "\n")
-        print(f">>>>> do scenario {scenario}")
+        print(f">>>>> initiate scenario '{scenario}'")
         # load the temporary model to ensure starting from the same point
         print("load the temporary network model ...")
         n, inv_periods = read_and_update_network(
@@ -1872,7 +1865,7 @@ def do_all_runs(
             if eval(globals()["run_mga_runs"]):
                 globals()["optimal_cost"] = m.objective.value
                 globals()["fixed_cost"] = (
-                    n.statistics.installed_capex().sum() * w
+                    n.statistics.installed_capex(drop_zero=True).sum() * w
                 ).sum()
             #
             # do dispatch after optimization
