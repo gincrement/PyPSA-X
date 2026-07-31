@@ -54,7 +54,7 @@ else:
     print("error! PyPSA is not installed\n")
     sys.exit(-1)
 #
-default_excel_filename = "PyPSA_PtX_AB_v1.0.0.xlsx"
+default_excel_filename = "PyPSA_PtX_AB_default.xlsx"
 __version__ = "0.9.3-dev"
 #
 headers = [
@@ -541,7 +541,6 @@ def get_solver_setting() -> dict:
     #
     if globals()["solver_name"] == "gurobi":
         solver_options = {
-            -
             # general solver settings
             "mipgap": globals()["mipgap"],
             "outputflag": globals()["output_flag"],
@@ -1441,60 +1440,6 @@ def create_summaries(
     return list_results, list_supplies, list_balances, list_curtailments
 
 
-# TODO replaced by n.optimize.fix_optimal_capacities() ...
-def set_optimized_capacities(
-    n: pypsa.Network,
-    period: int = 0,
-) -> pd.core.frame.DataFrame:
-    """
-    Set nom capacities based on optimization result (nom_opt).
-
-    Parameters
-    ----------
-    n: pypsa.Network
-        PyPSA network to be adjusted.
-
-    period: int
-        Year to be fixed.
-
-    Returns
-    -------
-    None
-    """
-    #
-    comps = pypsa.descriptors.nominal_attrs
-    #
-    if n.is_solved:
-        print("................ set nom = nom_opt ..................")
-        #
-        # loop through all components
-        for c in comps:
-            attr = comps[c]
-            if period > 0:
-                df = n.c[c].static
-                df[df.build_year == period][attr] = df[df.build_year == period][
-                    f"{attr}_opt"
-                ]
-                df[df.build_year == period][f"{attr}_min"] = df[
-                    df.build_year == period
-                ][f"{attr}_opt"]
-                df[df.build_year == period][f"{attr}_max"] = df[
-                    df.build_year == period
-                ][f"{attr}_opt"]
-                df.loc[df.build_year == period][f"{attr}_extendable"] = False
-            #
-            else:
-                df[attr] = df[f"{attr}_opt"]
-                df[f"{attr}_min"] = df[f"{attr}_opt"]
-                df[f"{attr}_max"] = df[f"{attr}_opt"]
-                df.loc[f"{attr}_extendable"] = False
-    #
-    else:
-        print("!! cannot set optimal capacities as n.is_solved = False !!")
-    #
-    return None
-
-
 def show_case_comparison(
     list_results: list,
     list_supplies: list,
@@ -1760,7 +1705,6 @@ def do_optimization(
                 return n, status, tc
             #
             n.optimize.fix_optimal_capacities()
-            # set_optimized_capacities(n, period)
     #
     else:
         print(
@@ -2619,6 +2563,60 @@ def force_technology_capacity(
     return None
 
 
+def force_single_technology_operation(
+    n: pypsa.Network,
+) -> None:
+    """
+    Limits the operation of technology options to replicate part-load behaviour.
+    The following column in the individual DataFrames needs to be defined:
+        _limit_single_operation
+
+    Hint: all this technology options need to have committable = True !
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    comps = pypsa.descriptors.nominal_attrs
+    col = "_limit_single_operation"
+    #
+    # loop through all components
+    for c in comps:
+        df = n.c[c].static
+        #
+        if col in df.columns:
+            if df[df[col].fillna("") > ""][col].unique().any():
+                for tech in df[df[col] > ""][col].unique():
+                    constr_name = f"Max-single-operation-{tech}"
+                    #
+                    # loop through all technology options of the individual class
+                    techs = []
+                    for t, row in df[(df[col] == tech) & df["committable"]].iterrows():
+                        techs.append(t)
+                    #
+                    for t, row in df[
+                        (df[col] == tech) & (not df["committable"])
+                    ].iterrows():
+                        print(f"... option {c}.{t} not used as committable is False")
+                    #
+                    if len(techs):
+                        # get status variable
+                        nom_col = "status"
+                        status_vars = m.variables[f"{c}-{nom_col}"].loc[:, techs]
+                        operating_count = status_vars.sum(dim="name")
+                        m.add_constraints(operating_count <= 1, name=constr_name)
+                        print(f"x) added constraint {constr_name}")
+    #
+    return None
+
+
 def mga_settings(
     n: pypsa.Network,
 ) -> None:
@@ -3183,6 +3181,8 @@ def extra_functionalities(
         #
         if eval(globals()["do_maintenance_planing"]):
             add_maintenance_constraints(n, globals()["maintenance_mode"])
+    #
+    force_single_technology_operation(n)
     #
     print("")
     return None
