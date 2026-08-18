@@ -3181,8 +3181,8 @@ def extra_functionalities(
         #
         if eval(globals()["do_maintenance_planing"]):
             add_maintenance_constraints(n, globals()["maintenance_mode"])
-    #
-    force_single_technology_operation(n)
+        #
+        force_single_technology_operation(n)
     #
     print("")
     return None
@@ -3244,6 +3244,120 @@ def check_oetc_usage(
     return kwargs
 
 
+def pypsa_to_long_format(
+    networks: pypsa.Network | dict[str, pypsa.Network],
+    include_static: bool = True,
+    include_dynamic: bool = True,
+    drop_na: bool = True,
+) -> pd.DataFrame:
+    """
+    Melt all static and dynamic components of PyPSA network(s) into a unified long-format DataFrame.
+
+    Parameters
+    ----------
+    networks : pypsa.Network or dict[str, pypsa.Network]
+        A single PyPSA Network object or a dictionary mapping scenario names to Network objects.
+
+    include_static : bool, optional
+        Whether to include static attributes (e.g., p_nom, bus, carrier).
+
+    include_dynamic : bool, optional
+        Whether to include time-series attributes (e.g., p, p_max_pu).
+
+    drop_na : bool, optional
+        Whether to drop rows with missing (NaN) values.
+
+    Returns
+    -------
+    pd.DataFrame
+        ['scenario', 'component', 'component_name', 'attribute', 'snapshot', 'value']
+    """
+    #
+    # Normalize input to a dictionary of scenarios
+    if isinstance(networks, pypsa.Network):
+        scenarios_dict = {"default": networks}
+    #
+    else:
+        scenarios_dict = networks
+    #
+    long_frames = []
+    for scenario_name, net in scenarios_dict.items():
+        for c in n.components:
+            comp_name = c.name
+            #
+            # static DataFrames
+            if include_static and not c.static.empty:
+                static_df = c.static.copy()
+                static_df.index.name = "component_name"
+                static_df = static_df.reset_index()
+                static_df.rename(columns={"name": "component_name"}, inplace=True)
+                #
+                static_melted = pd.melt(
+                    static_df,
+                    id_vars=["component_name"],
+                    var_name="attribute",
+                    value_name="value",
+                )
+                static_melted["scenario"] = scenario_name
+                static_melted["component"] = comp_name
+                static_melted["snapshot"] = pd.NA  # Static data has no timestamp
+                long_frames.append(static_melted)
+            #
+            # dynamic (Time-varying) DataFrames
+            if include_dynamic and hasattr(c, "dynamic"):
+                # Iterate through dynamic attributes (e.g., 'p', 'p_max_pu', 'status')
+                for attr, dynamic_df in c.dynamic.items():
+                    if isinstance(dynamic_df, pd.DataFrame) and not dynamic_df.empty:
+                        dynamic_df = dynamic_df.copy()
+                        dynamic_df.index.name = "snapshot"
+                        dynamic_df = dynamic_df.reset_index()
+                        dynamic_df.rename(
+                            columns={"name": "component_name"}, inplace=True
+                        )
+                        #
+                        dynamic_melted = pd.melt(
+                            dynamic_df,
+                            id_vars=["snapshot"],
+                            var_name="component_name",
+                            value_name="value",
+                        )
+                        dynamic_melted["scenario"] = scenario_name
+                        dynamic_melted["component"] = comp_name
+                        dynamic_melted["attribute"] = attr
+                        long_frames.append(dynamic_melted)
+    #
+    if not long_frames:
+        return pd.DataFrame(
+            columns=[
+                "scenario",
+                "component",
+                "component_name",
+                "attribute",
+                "snapshot",
+                "value",
+            ]
+        )
+    #
+    # Combine all melted DataFrames
+    full_df = pd.concat(long_frames, ignore_index=True)
+    #
+    # Standardize column order
+    cols_order = [
+        "scenario",
+        "component",
+        "component_name",
+        "attribute",
+        "snapshot",
+        "value",
+    ]
+    full_df = full_df[cols_order]
+    #
+    if drop_na:
+        full_df = full_df.dropna(subset=["value"])
+    #
+    return full_df
+
+
 def main() -> None:
     """
     Main function.
@@ -3254,7 +3368,23 @@ def main() -> None:
 
     Returns
     -------
-    None
+    n : pypsa.Network
+        The last PyPSA network after all runs.
+
+    list_results : list
+        List of results from all runs.
+
+    list_supplies : list
+        List of supply results from all runs.
+
+    list_balances : list
+        List of balance results from all runs.
+
+    list_curtailments : list
+        List of curtailment results from all runs.
+
+    df : pd.DataFrame
+        DataFrame containing capacity comparison of all runs.
     """
     #
     # read the optimization settings and scenario definitions

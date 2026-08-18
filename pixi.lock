@@ -5,6 +5,8 @@ environments:
   default:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
+    indexes:
+    - https://pypi.org/simple
     packages:
       linux-64:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
@@ -138,6 +140,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libxml2-devel-2.15.3-h49c6c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libzip-1.11.2-h6991a6a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/llvmlite-0.48.0-py312ha7fb451_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lz4-4.4.5-py312h3d67a73_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.10.0-h5888daf_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/lzo-2.10-h280c20c_1002.conda
@@ -151,6 +154,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/netcdf4-1.7.4-nompi_py311h498b1eb_108.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nlohmann_json-3.12.0-h54a6638_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-0.66.0-py312h7a2d7f2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numexpr-2.14.1-py312h88efc94_102.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-2.4.6-py312h33ff503_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.4-h55fea9a_0.conda
@@ -331,6 +335,15 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.3.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
+      - pypi: https://files.pythonhosted.org/packages/01/b1/1a3c4e436ad8a4c4ba3e70f4c62e1f927cbbb3c943a9bba5813b8b815bde/cachebox-5.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/08/f6/af32e23e563971ffb0fb86be52bc5be5c2c118858ffc119bf6a9039b173d/lxml-6.1.1-cp312-cp312-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/12/27/fb8d7338b4d551900fa3e580acbe7a0cf655d940e164cb5c00ec31961094/orderly_set-5.5.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/5a/79/9a00c8e61bb329ca505aacd4f1992701b7e6f66d6a3d456e310e1703e8d3/pandapipes-0.12.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/64/d4/b30e11b01b20f89b9974b879d0ecfc4f0d68b66d0ebb21f5365239915053/pypower-5.1.21-py2.py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6a/be/d07585e440d58835bad8f1c9ca7823b5252ffeda4c797e653a20215fca65/numpy_financial-1.0.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/aa/5e/fdd72167b57158d743353f71d453200719744d1e75f18b1c8230508db370/geojson-3.3.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/ab/07/a441f9ea1b7f98963c168c04639f0786ef33962aef8dc054742ca15ce720/pandapower-3.1.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/c7/26/4a2bad8eb430d8d805a4642c4bff25103a37548d74ab346f8b1e024abcc5/deepdiff-9.1.0-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -2586,6 +2599,24 @@ packages:
     - libzlib >=1.3.2,<2.0a0
   size: 63629
   timestamp: 1774072609062
+- conda: https://conda.anaconda.org/conda-forge/linux-64/llvmlite-0.48.0-py312ha7fb451_1.conda
+  sha256: 83d276b2105eaed8bec7bcd28406acbc02c88aaf9eca4394abadd0051bebdfac
+  md5: 765eece0b00be7efd8fa9d10789c806f
+  depends:
+  - python
+  - __glibc >=2.17,<3.0.a0
+  - libstdcxx >=14
+  - libgcc >=14
+  - python_abi 3.12.* *_cp312
+  - libzlib >=1.3.2,<2.0a0
+  - zstd >=1.5.7,<1.6.0a0
+  license: BSD-2-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/llvmlite?source=hash-mapping
+  run_exports: {}
+  size: 40434314
+  timestamp: 1784043435918
 - conda: https://conda.anaconda.org/conda-forge/linux-64/lz4-4.4.5-py312h3d67a73_1.conda
   sha256: e8ae9141c7afcc95555fca7ff5f91d7a84f094536715211e750569fd4bb2caa4
   md5: a669145a2c834895bdf3fcba1f1e5b9c
@@ -2814,6 +2845,33 @@ packages:
   run_exports: {}
   size: 136216
   timestamp: 1758194284857
+- conda: https://conda.anaconda.org/conda-forge/linux-64/numba-0.66.0-py312h7a2d7f2_1.conda
+  sha256: db5793bf5ce3cb9c6ceb7ce28808f35ce143636a8eebedf0a6cada0308c212a7
+  md5: 04e3148827c9dea75f6b87c30a61a214
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - _openmp_mutex >=4.5
+  - libgcc >=14
+  - libstdcxx >=14
+  - llvmlite >=0.48.0,<0.49.0a0
+  - numpy >=1.22.3,<2.5
+  - numpy >=1.23,<3
+  - python >=3.12,<3.13.0a0
+  - python_abi 3.12.* *_cp312
+  constrains:
+  - cuda-python >=11.6
+  - scipy >=1.0
+  - tbb >=2021.6.0
+  - libopenblas !=0.3.6
+  - cuda-version >=11.2
+  - cudatoolkit >=11.2
+  license: BSD-2-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/numba?source=compressed-mapping
+  run_exports: {}
+  size: 5780280
+  timestamp: 1785418460491
 - conda: https://conda.anaconda.org/conda-forge/linux-64/numexpr-2.14.1-py312h88efc94_102.conda
   sha256: f46a6264647aa650d7481ca27aa5dc93c78bb1d7721f572ac326e79211264ee3
   md5: 98ecb65a9dd993774cc03f07a8b83231
@@ -5682,3 +5740,183 @@ packages:
   run_exports: {}
   size: 24190
   timestamp: 1779159948016
+- pypi: https://files.pythonhosted.org/packages/01/b1/1a3c4e436ad8a4c4ba3e70f4c62e1f927cbbb3c943a9bba5813b8b815bde/cachebox-5.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+  name: cachebox
+  version: 5.2.3
+  sha256: 2a1e7d3cb8a5e7e68996a8619e3ef8771a124d14568c251f9e586eba88d759c1
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/08/f6/af32e23e563971ffb0fb86be52bc5be5c2c118858ffc119bf6a9039b173d/lxml-6.1.1-cp312-cp312-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl
+  name: lxml
+  version: 6.1.1
+  sha256: ebe6af670449830d6d9b752c256a983291c766a1365ba5d5460048f9e33a7818
+  requires_dist:
+  - cssselect>=0.7 ; extra == 'cssselect'
+  - html5lib ; extra == 'html5'
+  - beautifulsoup4 ; extra == 'htmlsoup'
+  - lxml-html-clean ; extra == 'html-clean'
+  requires_python: '>=3.8'
+- pypi: https://files.pythonhosted.org/packages/12/27/fb8d7338b4d551900fa3e580acbe7a0cf655d940e164cb5c00ec31961094/orderly_set-5.5.0-py3-none-any.whl
+  name: orderly-set
+  version: 5.5.0
+  sha256: 46f0b801948e98f427b412fcabb831677194c05c3b699b80de260374baa0b1e7
+  requires_dist:
+  - coverage~=7.6.0 ; extra == 'coverage'
+  - bump2version~=1.0.0 ; extra == 'dev'
+  - ipdb~=0.13.0 ; extra == 'dev'
+  - orjson ; extra == 'optimize'
+  - flake8~=7.1.0 ; extra == 'static'
+  - flake8-pyproject~=1.2.3 ; extra == 'static'
+  - pytest~=8.3.0 ; extra == 'test'
+  - pytest-benchmark~=5.1.0 ; extra == 'test'
+  - pytest-cov~=6.0.0 ; extra == 'test'
+  - python-dotenv~=1.0.0 ; extra == 'test'
+  requires_python: '>=3.8'
+- pypi: https://files.pythonhosted.org/packages/5a/79/9a00c8e61bb329ca505aacd4f1992701b7e6f66d6a3d456e310e1703e8d3/pandapipes-0.12.0-py3-none-any.whl
+  name: pandapipes
+  version: 0.12.0
+  sha256: 21d873a144a53223fe0a99376766f482cd11b2816e825cdc2ab5e6c863594d63
+  requires_dist:
+  - pandapower>=3.1
+  - matplotlib
+  - shapely
+  - numpydoc>=1.5.0 ; extra == 'docs'
+  - sphinx>=5.3.0 ; extra == 'docs'
+  - sphinx-rtd-theme>=1.1.1 ; extra == 'docs'
+  - sphinxcontrib-bibtex>=2.5.0 ; extra == 'docs'
+  - sphinx-pyproject ; extra == 'docs'
+  - plotly ; extra == 'plotting'
+  - igraph ; extra == 'plotting'
+  - pytest ; extra == 'test'
+  - pytest-xdist ; extra == 'test'
+  - pytest-split ; extra == 'test'
+  - nbmake ; extra == 'test'
+  - numba ; extra == 'test'
+  - setuptools ; python_full_version >= '3.12' and extra == 'test'
+  - numpydoc>=1.5.0 ; extra == 'all'
+  - sphinx>=5.3.0 ; extra == 'all'
+  - sphinx-rtd-theme>=1.1.1 ; extra == 'all'
+  - sphinxcontrib-bibtex>=2.5.0 ; extra == 'all'
+  - sphinx-pyproject ; extra == 'all'
+  - plotly ; extra == 'all'
+  - igraph ; extra == 'all'
+  - pytest ; extra == 'all'
+  - pytest-xdist ; extra == 'all'
+  - pytest-split ; extra == 'all'
+  - nbmake ; extra == 'all'
+  - numba ; extra == 'all'
+  - setuptools ; python_full_version >= '3.12' and extra == 'all'
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/64/d4/b30e11b01b20f89b9974b879d0ecfc4f0d68b66d0ebb21f5365239915053/pypower-5.1.21-py2.py3-none-any.whl
+  name: pypower
+  version: 5.1.21
+  sha256: cf61990475a34b10d639ead84bd4ded608170fc7d16d69022bb9e3948731303d
+- pypi: https://files.pythonhosted.org/packages/6a/be/d07585e440d58835bad8f1c9ca7823b5252ffeda4c797e653a20215fca65/numpy_financial-1.0.0-py3-none-any.whl
+  name: numpy-financial
+  version: 1.0.0
+  sha256: bae534b357516f12258862d1f0181d911032d0467f215bfcd1c264b4da579047
+  requires_dist:
+  - numpy>=1.15
+  requires_python: '>=3.5'
+- pypi: https://files.pythonhosted.org/packages/aa/5e/fdd72167b57158d743353f71d453200719744d1e75f18b1c8230508db370/geojson-3.3.0-py3-none-any.whl
+  name: geojson
+  version: 3.3.0
+  sha256: a2d885187eeaa8b357600b3fcc9d963cb4300d1694196636dbd7eddc82fd0825
+  requires_python: '>=3.10'
+- pypi: https://files.pythonhosted.org/packages/ab/07/a441f9ea1b7f98963c168c04639f0786ef33962aef8dc054742ca15ce720/pandapower-3.1.2-py3-none-any.whl
+  name: pandapower
+  version: 3.1.2
+  sha256: 45b02e93f441cb484e33aaff014f8cdd0d7b6e095678bc6cd6fbf882c6372c68
+  requires_dist:
+  - pandas>=1.0
+  - networkx>=2.5
+  - scipy
+  - numpy
+  - packaging
+  - tqdm
+  - deepdiff
+  - geojson
+  - lxml
+  - typing-extensions~=4.9
+  - numpydoc>=1.5.0 ; extra == 'docs'
+  - matplotlib ; extra == 'docs'
+  - sphinx>=5.3.0 ; extra == 'docs'
+  - sphinx-rtd-theme>=1.1.1 ; extra == 'docs'
+  - sphinx-pyproject ; extra == 'docs'
+  - plotly>=3.1.1 ; extra == 'plotting'
+  - matplotlib ; extra == 'plotting'
+  - igraph ; extra == 'plotting'
+  - geopandas>=1.0 ; extra == 'plotting'
+  - pytest~=8.1 ; extra == 'test'
+  - pytest-xdist ; extra == 'test'
+  - nbmake ; extra == 'test'
+  - ortools ; extra == 'performance'
+  - numba==0.60.0 ; extra == 'performance'
+  - lightsim2grid==0.10.1 ; extra == 'performance'
+  - xlsxwriter ; extra == 'fileio'
+  - openpyxl ; extra == 'fileio'
+  - cryptography ; extra == 'fileio'
+  - geopandas>=1.0 ; extra == 'fileio'
+  - psycopg2 ; extra == 'fileio'
+  - matpowercaseframes ; extra == 'converter'
+  - power-grid-model-io ; extra == 'pgm'
+  - shapely ; extra == 'control'
+  - numpydoc>=1.5.0 ; extra == 'all'
+  - sphinx>=5.3.0 ; extra == 'all'
+  - sphinx-rtd-theme>=1.1.1 ; extra == 'all'
+  - sphinx-pyproject ; extra == 'all'
+  - plotly>=3.1.1 ; extra == 'all'
+  - matplotlib ; extra == 'all'
+  - igraph ; extra == 'all'
+  - geopandas>=1.0 ; extra == 'all'
+  - pytest~=8.1 ; extra == 'all'
+  - pytest-xdist ; extra == 'all'
+  - nbmake ; extra == 'all'
+  - ortools ; extra == 'all'
+  - numba==0.60.0 ; extra == 'all'
+  - lightsim2grid==0.10.1 ; extra == 'all'
+  - xlsxwriter ; extra == 'all'
+  - openpyxl ; extra == 'all'
+  - cryptography ; extra == 'all'
+  - psycopg2 ; extra == 'all'
+  - matpowercaseframes ; extra == 'all'
+  - power-grid-model-io ; extra == 'all'
+  requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/c7/26/4a2bad8eb430d8d805a4642c4bff25103a37548d74ab346f8b1e024abcc5/deepdiff-9.1.0-py3-none-any.whl
+  name: deepdiff
+  version: 9.1.0
+  sha256: 80c0460e1993b04f6f0ca79abf25548b129fd218478c4ebb08f80560f5d10610
+  requires_dist:
+  - cachebox>=5.2,<6
+  - orderly-set>=5.5.0,<6
+  - click~=8.3.1 ; extra == 'cli'
+  - pyyaml~=6.0.3 ; extra == 'cli'
+  - coverage~=7.13.5 ; extra == 'coverage'
+  - bump2version~=1.0.1 ; extra == 'dev'
+  - jsonpickle~=4.1.1 ; extra == 'dev'
+  - ipdb~=0.13.13 ; extra == 'dev'
+  - numpy~=2.4.3 ; python_full_version >= '3.14' and extra == 'dev'
+  - numpy~=2.2.0 ; python_full_version < '3.14' and extra == 'dev'
+  - python-dateutil~=2.9.0.post0 ; extra == 'dev'
+  - orjson~=3.11.7 ; extra == 'dev'
+  - tomli~=2.4.0 ; extra == 'dev'
+  - tomli-w~=1.2.0 ; extra == 'dev'
+  - pandas~=3.0.1 ; python_full_version >= '3.11' and extra == 'dev'
+  - pandas~=2.2.0 ; python_full_version < '3.11' and extra == 'dev'
+  - polars~=1.39.3 ; extra == 'dev'
+  - nox==2026.2.9 ; extra == 'dev'
+  - uuid6==2025.0.1 ; extra == 'dev'
+  - pytz ; extra == 'dev'
+  - flit-core==3.12.0 ; extra == 'dev'
+  - sphinx~=8.1.3 ; extra == 'docs'
+  - sphinx-sitemap~=2.9.0 ; extra == 'docs'
+  - sphinxemoji~=0.3.2 ; extra == 'docs'
+  - furo>=2024.8.6 ; extra == 'docs'
+  - orjson ; extra == 'optimize'
+  - flake8~=7.3.0 ; extra == 'static'
+  - flake8-pyproject~=1.2.4 ; extra == 'static'
+  - pydantic~=2.12.5 ; extra == 'static'
+  - pytest~=9.0.3 ; extra == 'test'
+  - pytest-benchmark~=5.2.3 ; extra == 'test'
+  - pytest-cov~=7.1.0 ; extra == 'test'
+  - python-dotenv~=1.2.2 ; extra == 'test'
+  requires_python: '>=3.10'
