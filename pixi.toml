@@ -9,7 +9,7 @@ version = "0.1.0"
 
 [dependencies]
 pypsa = ">=1.2.4,<2"
-tsam = ">=3.4.1,<4"
+tsam = ">=4.0.0,<5"
 atlite = ">=0.6.1,<0.7"
 xlrd = ">=2.0.2,<3"
 openpyxl = ">=3.1.5,<4"
@@ -22,9 +22,8 @@ linopy = ">=0.9.0,<0.10"
 pre_commit = ">=4.6.0,<5"
 python-calamine = ">=0.6.1,<0.7"
 pandas = "==2.3.3"
-highspy = ">=1.14.0,<2"
+highspy = "==1.15.1"
 numba = ">=0.66.0,<0.67"
-highs = "==1.15.1"
 
 [pypi-dependencies]
 pypsa = { version = "*", extras = ["excel"] }

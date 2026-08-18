@@ -39,6 +39,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #
 from importlib.util import find_spec
+import argparse
 
 #
 if find_spec("pypsa"):
@@ -90,22 +91,19 @@ for header in headers:
     print(header)
 #
 # check provided arguments on the command line
-if (len(sys.argv) > 1) and (sys.argv[0] != ""):
-    if os.path.exists(sys.argv[1]):
-        excel_filename = sys.argv[1]
-    #
-    else:
-        print(f'error! provided input file does not exist: "{sys.argv[1]}"')
-        print(f'fallback to default input file: "{default_excel_filename}"\n')
-        excel_filename = default_excel_filename
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--import_xls", type=str, help="File to read configuration and setting from."
+)
+args = parser.parse_args()
 #
-else:
-    excel_filename = default_excel_filename
+excel_filename = default_excel_filename
+if args.import_xls:
+    excel_filename = args.import_xls
 #
-# check if the Excel file exists
-if not os.path.exists(excel_filename):
-    print(f'error! the provided input file does not exist "{excel_filename}"')
-    print("use of pypsa-x:\n$ python pypsa-x <path_to_excel_file>\n")
+if excel_filename != "none" and not os.path.exists(excel_filename):
+    print(f'error! provided input file does not exist: "{excel_filename}"')
+    print(f'fallback to default input file: "{default_excel_filename}"\n')
     sys.exit(-1)
 #
 deactivate_network_viewers = True
