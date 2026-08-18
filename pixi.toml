@@ -24,6 +24,7 @@ python-calamine = ">=0.6.1,<0.7"
 pandas = "==2.3.3"
 highspy = ">=1.14.0,<2"
 numba = ">=0.66.0,<0.67"
+highs = "==1.15.1"
 
 [pypi-dependencies]
 pypsa = { version = "*", extras = ["excel"] }
