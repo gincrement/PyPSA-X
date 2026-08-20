@@ -421,6 +421,8 @@ def read_all_params(
         # multiple years; e.g., 5 or 10
         "primary_optimization": "pathway",
         "objective_function": "annuity+o&m",  # 'annuity-o&m', 'npv'
+        # N-1 operation
+        "nminus1_activate": "False",
         # some reserve margin settings
         "rm_activate": "False",
         "rm_factor_a": 1,
@@ -2661,6 +2663,95 @@ def mga_settings(
     return None
 
 
+def nminus1_constraint(n: pypsa.Network):
+    """
+    Adds constraints for N-1 operation of generators and storage units.
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    p_gen = n.model.variables["Generator-p"]
+    p_nom_gen = n.model.variables["Generator-p_nom"]
+    r_gen = n.model.add_variables(
+        lower=0, coords=[n.snapshots, n.generators.index], name="Generator-reserve"
+    )
+    #
+    p_disp = n.model.variables["StorageUnit-p_dispatch"]
+    p_store = n.model.variables["StorageUnit-p_store"]
+    soc = n.model.variables["StorageUnit-state_of_charge"]
+    p_nom_stor = n.model.variables["StorageUnit-p_nom"]
+    r_stor = n.model.add_variables(
+        lower=0, coords=[n.snapshots, n.storage_units.index], name="StorageUnit-reserve"
+    )
+    #
+    # Headroom Constraints
+    fix_gens = n.generators[~n.generators.p_nom_extendable].index
+    if not fix_gens.empty:
+        n.model.add_constraints(
+            r_gen.loc[:, fix_gens] + p_gen.loc[:, fix_gens]
+            <= n.generators.loc[fix_gens, "p_nom"],
+            name="Gen-headroom-fix",
+        )
+    #
+    ext_thermal = n.generators[
+        n.generators.p_nom_extendable & (n.generators.carrier != "solar")
+    ].index
+    if not ext_thermal.empty:
+        n.model.add_constraints(
+            r_gen.loc[:, ext_thermal]
+            + p_gen.loc[:, ext_thermal]
+            - p_nom_gen.loc[ext_thermal]
+            <= 0,
+            name="Gen-headroom-ext-thermal",
+        )
+    #
+    pv_gens = n.generators[n.generators.carrier == "solar"].index
+    if not pv_gens.empty:
+        p_max_pu = n.generators_t.p_max_pu[pv_gens]
+        n.model.add_constraints(
+            r_gen.loc[:, pv_gens]
+            + p_gen.loc[:, pv_gens]
+            - p_nom_gen.loc[pv_gens] * p_max_pu
+            <= 0,
+            name="Gen-headroom-solar",
+        )
+    #
+    thermal_gens = n.generators[n.generators.carrier != "solar"].index
+    n.model.add_constraints(
+        r_gen.loc[:, thermal_gens] <= 1.0 * p_gen.loc[:, thermal_gens],
+        name="Thermal-spinning-limit",
+    )
+    #
+    # Storage Reserve Constraints
+    tau = 0.5
+    n.model.add_constraints(
+        r_stor + p_disp - p_nom_stor <= 0, name="Storage-inverter-cap"
+    )
+    n.model.add_constraints(
+        r_stor + p_disp - p_store - p_nom_stor <= 0, name="Storage-shift-cap"
+    )
+    n.model.add_constraints(r_stor * tau <= soc, name="Storage-soc-reservation")
+    #
+    # Unified N-1 Contingencies
+    total_system_reserve = r_gen.sum("name") + r_stor.sum("name")
+    #
+    n.model.add_constraints(
+        total_system_reserve - r_gen >= p_gen, name="N-1-gen-contingency"
+    )
+    n.model.add_constraints(
+        total_system_reserve - r_stor >= p_disp, name="N-1-storage-contingency"
+    )
+    #
+    return None
+
+
 def reserve_constraints(
     n: pypsa.Network,
 ) -> None:
@@ -3158,6 +3249,10 @@ def extra_functionalities(
         if eval(globals()["rm_activate"]):
             if not n.has_scenarios:
                 reserve_constraints(n)
+        #
+        if eval(globals()["nminus1_activate"]):
+            if not n.has_scenarios:
+                nminus1_constraint(n)
     #
     if (eval(globals()["run_mga_runs"])) and (globals()["mga_slack"] > 0):
         mga_settings(n)
