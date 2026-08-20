@@ -57,7 +57,7 @@ optimization for a more accurate operational behavior.
 - **consider retirement gains**: allow retirement of technology which decreases the annual
 maintenance cost;
 - **reserve margin**: adds a preliminary version of operational reserve considerations;
-- **limit operation**: option to limit the operation of e.g., emergency technology towards a
+- **limit operating hours**: option to limit the operation of e.g., emergency technology towards a
 predefined number of hours (e.g., 3 h/a);
 - **part-load operation**: mimic part-load operation by defining multiple options and linking
 them to ensure that only one of them can be in operation;
