@@ -132,7 +132,8 @@ if find_spec("pypsa"):
     HIGHS_VERSION = importlib.metadata.version("highspy")
     #
     # make sure to use the new API
-    pypsa.options.api.new_components_api = True
+    pypsa.options.set_option("api.new_components_api", True)
+    pypsa.options.set_option("api.legacy_string_dtype", str)
     pypsa.options.set_option("params.statistics.nice_names", False)
     pypsa.options.set_option("params.statistics.drop_zero", True)
     pypsa.options.set_option("params.statistics.round", 2)
@@ -423,6 +424,10 @@ def read_all_params(
         "objective_function": "annuity+o&m",  # 'annuity-o&m', 'npv'
         # N-1 operation
         "nminus1_activate": "False",
+        # hourly matching settings
+        "cfe_matching": 0.0,
+        "cfe_type": "year",
+        "cfe_rens": ["solar", "wind", "biomass", "geothermal"],
         # some reserve margin settings
         "rm_activate": "False",
         "rm_factor_a": 1,
@@ -1686,8 +1691,9 @@ def do_optimization(
         print("\ndo year by year / myopic optimization")
         #
         for period in inv_periods:
+            sns = n.snapshots
             # limit the snapshots to the current year
-            snapshots = n.snapshots[n.snapshots.get_level_values("period") == period]
+            snapshots = sns[sns.get_level_values("period") == period]
             status, tc = n.optimize(
                 snapshots=snapshots,
                 multi_investment_periods=True,
@@ -2198,6 +2204,7 @@ def minimum_load_if_operates(
     """
     #
     m = n.model
+    sns = n.snapshots
     # defines the variables and constraints only for the required technology options
     comps = pypsa.descriptors.nominal_attrs
     col = "_min_pu_if_in_op"
@@ -2210,9 +2217,7 @@ def minimum_load_if_operates(
                 # create the binary status variable
                 var_name = f"{c}-{t}-hourly-opstatus"
                 if var_name not in m.variables:
-                    status = m.add_variables(
-                        name=var_name, binary=True, coords=[n.snapshots]
-                    )
+                    status = m.add_variables(name=var_name, binary=True, coords=[sns])
                 #
                 else:
                     status = m.variables[var_name]
@@ -2663,6 +2668,190 @@ def mga_settings(
     return None
 
 
+def add_REN_matching(
+    n: pypsa.Network,
+    share: float = 0.8,
+    frequency: str = "year",
+    renewable_carriers: list = ["wind"],
+):
+    """
+    Adds a minimum renewable/wind share constraint over a specified time resolution.
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+    [...]
+
+    Returns
+    -------
+    None
+    """
+    #
+    print("add_REN_matching not ready yet ...")
+    #
+    return None
+    #
+    # TODO
+    #
+    m = n.model
+    sns = n.snapshots
+    res_gens = n.generators.query("carrier in @renewable_carriers").index
+    if res_gens.empty:
+        raise ValueError("No matching generators found for specified carriers.")
+    gen_p = m["Generator-p"]
+    gen_dim = [d for d in gen_p.dims if d != "snapshot"][0]
+    weights = n.snapshot_weightings.generators.loc[sns]
+    weighted_gen_p = gen_p * weights
+    res_gen = weighted_gen_p.sel({gen_dim: res_gens}).sum(dim=gen_dim)
+    tot_gen = weighted_gen_p.sum(dim=gen_dim)
+    freq = frequency.lower()
+    if freq in ["hour"]:
+        pass
+    elif freq in ["day", "week", "month"]:
+        group_freq = {
+            "day": "D",
+            "week": "W",
+            "month": "MS",
+        }[freq]
+        snapshot_dates = pd.Series(sns, index=sns)
+        grouping = snapshot_dates.dt.to_period(group_freq).astype(str)
+        res_gen = res_gen.groupby(grouping).sum()
+        tot_gen = tot_gen.groupby(grouping).sum()
+    elif freq in ["year", "total"]:
+        res_gen = res_gen.sum(dim="snapshot")
+        tot_gen = tot_gen.sum(dim="snapshot")
+    lhs = res_gen - (share * tot_gen)
+    constr_name = f"wind_share_{freq}"
+    m.add_constraints(lhs >= 0, name=constr_name)
+    return None
+
+
+def add_ramping_costs(n: pypsa.Network):
+    """
+    Adds constraints to include cost on chaning output on top of the marginal costs.
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    sns = n.snapshots
+    if len(sns) < 2:
+        return
+    #
+    comps = pypsa.descriptors.nominal_attrs
+    col = ["_ramp_up_cost", "_ramp_down_cost"]
+    #
+    # loop through all components
+    for c in comps:
+        df = n.c[c].static
+        attr = comps[c][:1]
+        #
+        # check if the necessary columns exists in current dataframe
+        missing = set(col) - set(df.columns)
+        if not missing:
+            # only consider options that have any ramp cost defined
+            tech_mask = (df.get(col[0], 0) != 0) | (df.get(col[1], 0) != 0)
+            ramping_tech = df.index[tech_mask]
+            if ramping_tech.empty:
+                continue
+            #
+            # create named linopy coordinates
+            snapshot_idx = pd.Index(sns[1:], name="snapshot")
+            tech_idx = pd.Index(ramping_tech, name=c)
+            #
+            # add ramp-up and ramp-down decision variables for filtered technology options
+            delta_p_up = m.add_variables(
+                lower=0, coords=[snapshot_idx, tech_idx], name=f"{c}-delta_p_up"
+            )
+            delta_p_down = m.add_variables(
+                lower=0,
+                coords=[snapshot_idx, tech_idx],
+                name=f"{c}-delta_p_down",
+            )
+            #
+            # slice power variables for the selected technology options across time
+            p = m.variables[f"{c}-{attr}"].loc[:, ramping_tech]
+            p_curr = p.loc[sns[1:]]
+            p_prev = p.loc[sns[:-1]].assign_coords(snapshot=sns[1:])
+            #
+            # add linear balance constraint across time and technology options
+            m.add_constraints(
+                p_curr - p_prev == delta_p_up - delta_p_down, name=f"{c}-ramp_balance"
+            )
+            # extract ramping cost parameters aligned with ramping_gens
+            cost_up = df.loc[ramping_tech, "_ramp_up_cost"]
+            cost_down = df.loc[ramping_tech, "_ramp_down_cost"]
+            #
+            # add objective terms (Linopy broadcasts series/dataarrays automatically)
+            m.objective += (delta_p_up * cost_up + delta_p_down * cost_down).sum()
+    #
+    return None
+
+
+def block_constraints(n: pypsa.Network):
+    """
+    Adds constraints for N-1 operation of generators and storage units.
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    m = n.model
+    sns = n.snapshots
+    #
+    comps = pypsa.descriptors.nominal_attrs
+    col = "_hours_per_block"
+    n_sns = len(sns)
+    #
+    for c_name, var_suffix in comps.items():
+        df = n.components[c_name].static
+        if df.empty or col not in df.columns:
+            continue
+        #
+        hours_series = df[col].fillna(1).astype(int)
+        var_key = f"{c_name}-{var_suffix[0]}"
+        if var_key not in m.variables:
+            continue
+        #
+        var_obj = n.model.variables[var_key]
+        dim_name = [d for d in var_obj.dims if d != "snapshot"][0]
+        active_names = var_obj.coords[dim_name].values
+        #
+        for block_size, group in df.groupby(hours_series):
+            if block_size <= 1:
+                continue
+            #
+            elem_names = pd.Index(group.index).intersection(active_names)
+            if elem_names.empty:
+                continue
+            #
+            block_ids = np.arange(n_sns) // block_size
+            block_start_mask = block_ids != np.roll(block_ids, 1)
+            block_start_mask[0] = True
+            ref_indices = np.where(block_start_mask)[0]
+            ref_snapshots = sns[ref_indices[block_ids]]
+            var_sub = var_obj.loc[{dim_name: elem_names}]
+            var_ref = var_sub.sel(snapshot=ref_snapshots).assign_coords(snapshot=sns)
+            m.add_constraints(
+                var_sub - var_ref == 0,
+                name=f"{c_name}-{var_suffix}_block_{block_size}h",
+            )
+
+
 def nminus1_constraint(n: pypsa.Network):
     """
     Adds constraints for N-1 operation of generators and storage units.
@@ -2677,10 +2866,11 @@ def nminus1_constraint(n: pypsa.Network):
     None
     """
     #
+    sns = n.snapshots
     p_gen = n.model.variables["Generator-p"]
     p_nom_gen = n.model.variables["Generator-p_nom"]
     r_gen = n.model.add_variables(
-        lower=0, coords=[n.snapshots, n.generators.index], name="Generator-reserve"
+        lower=0, coords=[sns, n.generators.index], name="Generator-reserve"
     )
     #
     p_disp = n.model.variables["StorageUnit-p_dispatch"]
@@ -2688,7 +2878,7 @@ def nminus1_constraint(n: pypsa.Network):
     soc = n.model.variables["StorageUnit-state_of_charge"]
     p_nom_stor = n.model.variables["StorageUnit-p_nom"]
     r_stor = n.model.add_variables(
-        lower=0, coords=[n.snapshots, n.storage_units.index], name="StorageUnit-reserve"
+        lower=0, coords=[sns, n.storage_units.index], name="StorageUnit-reserve"
     )
     #
     # Headroom Constraints
@@ -2782,6 +2972,7 @@ def reserve_constraints(
     # x) reserve at least the size of the largest unit being built or is built
     #
     m = n.model
+    sns = n.snapshots
     col = "_rm_participation"
     comps = pypsa.descriptors.nominal_attrs
     #
@@ -2800,9 +2991,7 @@ def reserve_constraints(
             # create the binary status variable
             var_name = f"{c}-p_reserve_up"
             if var_name not in m.variables:
-                v_rp = m.add_variables(
-                    lower=0, name=var_name, coords=[n.snapshots, df.index]
-                )
+                v_rp = m.add_variables(lower=0, name=var_name, coords=[sns, df.index])
             #
             else:
                 v_rp = m.variables[var_name]
@@ -2829,21 +3018,21 @@ def reserve_constraints(
                 link_cap - m.variables[f"{var_name}"] - m.variables[f"{c}-{attr[0]}"]
                 >= 0,
                 name=constr_name,
-                coords=[n.snapshots, df.index],
+                coords=[sns, df.index],
             )
             #
             constr_name = f"{c}-reserve_up-limit-min_pu"
             m.add_constraints(
                 v_rp <= df[col] * (1 - df[attr[0] + "_min_pu"]) * link_cap,
                 name=constr_name,
-                coords=[n.snapshots, df.index],
+                coords=[sns, df.index],
             )
             #
             constr_name = f"{c}-reserve_up-limit-ramp_up"
             m.add_constraints(
                 v_rp <= df[col] * df["ramp_limit_up"].fillna(1) * link_cap,
                 name=constr_name,
-                coords=[n.snapshots, df.index],
+                coords=[sns, df.index],
             )
             #
             """
@@ -2884,6 +3073,7 @@ def limit_operation_of_emergency_technology(
     """
     #
     m = n.model
+    sns = n.snapshots
     col = "_max_op_hours"
     comps = pypsa.descriptors.nominal_attrs
     #
@@ -2900,9 +3090,7 @@ def limit_operation_of_emergency_technology(
                 # create the binary status variable
                 var_name = f"{c}-{t}-hourly-opstatus"
                 if var_name not in m.variables:
-                    status = m.add_variables(
-                        name=var_name, binary=True, coords=[n.snapshots]
-                    )
+                    status = m.add_variables(name=var_name, binary=True, coords=[sns])
                 #
                 else:
                     status = m.variables[var_name]
@@ -2916,7 +3104,7 @@ def limit_operation_of_emergency_technology(
                     m.add_constraints(dispatch <= bigM * status, name=constr_name)
                 #
                 # loop through available years
-                for y in n.snapshots.to_frame().period.unique():
+                for y in sns.to_frame().period.unique():
                     constr_name = f"{c}-{t}-limit_hours_of_op-{y}"
                     if constr_name not in m.constraints and abs(row[col]) != np.inf:
                         m.add_constraints(
@@ -2950,6 +3138,7 @@ def strict_unsimultaneous_charging_discharging(
     """
     #
     m = n.model
+    sns = n.snapshots
     comps = pypsa.descriptors.nominal_attrs
     col = "_strict_binary_op"
     df_list = []
@@ -3004,7 +3193,7 @@ def strict_unsimultaneous_charging_discharging(
                 bin_var = m.add_variables(
                     binary=True,
                     dims=["snapshot"],
-                    coords={"snapshot": n.snapshots},
+                    coords={"snapshot": sns},
                     name=var_name,
                 )
             #
@@ -3017,7 +3206,7 @@ def strict_unsimultaneous_charging_discharging(
                     lower=1.0,
                     upper=1.0,
                     dims=["snapshot"],
-                    coords={"snapshot": n.snapshots},
+                    coords={"snapshot": sns},
                     name=var_name,
                 )
             #
@@ -3239,6 +3428,15 @@ def extra_functionalities(
     if eval(globals()["do_operational_constraints"]):
         link_operation(n)
         limit_hourly_operation_by_capacity(n)
+        add_ramping_costs(n)
+        block_constraints(n)
+        #
+        add_REN_matching(
+            n,
+            share=globals()["cfe_matching"],
+            frequency=globals()["cfe_type"],
+            renewable_carriers=globals()["cfe_rens"],
+        )
     #
     if eval(globals()["do_investment_constraints"]):
         link_capacities(n)

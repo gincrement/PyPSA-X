@@ -62,6 +62,10 @@ predefined number of hours (e.g., 3 h/a);
 - **part-load operation**: mimic part-load operation by defining multiple options and linking
 them to ensure that only one of them can be in operation;
 - **N-1 operation**: consider a strict N-1 operation for advanced reliability;
+- **cost for changing output**: add additional cost above the marginal cost for changing the
+power output;
+- **hourly match**: add constraints to fullfil given hourly matching constraints by e.g., year,
+month, week, day, and hour
 
 ## Installation
 
