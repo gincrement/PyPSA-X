@@ -2827,7 +2827,7 @@ def block_constraints(n: pypsa.Network):
         if var_key not in m.variables:
             continue
         #
-        var_obj = n.model.variables[var_key]
+        var_obj = m.variables[var_key]
         dim_name = [d for d in var_obj.dims if d != "snapshot"][0]
         active_names = var_obj.coords[dim_name].values
         #
@@ -2867,24 +2867,25 @@ def nminus1_constraint(n: pypsa.Network):
     """
     #
     sns = n.snapshots
-    p_gen = n.model.variables["Generator-p"]
-    p_nom_gen = n.model.variables["Generator-p_nom"]
-    r_gen = n.model.add_variables(
+    m = n.model
+    p_gen = m.variables["Generator-p"]
+    p_nom_gen = m.variables["Generator-p_nom"]
+    r_gen = m.add_variables(
         lower=0, coords=[sns, n.generators.index], name="Generator-reserve"
     )
     #
-    p_disp = n.model.variables["StorageUnit-p_dispatch"]
-    p_store = n.model.variables["StorageUnit-p_store"]
-    soc = n.model.variables["StorageUnit-state_of_charge"]
-    p_nom_stor = n.model.variables["StorageUnit-p_nom"]
-    r_stor = n.model.add_variables(
+    p_disp = m.variables["StorageUnit-p_dispatch"]
+    p_store = m.variables["StorageUnit-p_store"]
+    soc = m.variables["StorageUnit-state_of_charge"]
+    p_nom_stor = m.variables["StorageUnit-p_nom"]
+    r_stor = m.add_variables(
         lower=0, coords=[sns, n.storage_units.index], name="StorageUnit-reserve"
     )
     #
     # Headroom Constraints
     fix_gens = n.generators[~n.generators.p_nom_extendable].index
     if not fix_gens.empty:
-        n.model.add_constraints(
+        m.add_constraints(
             r_gen.loc[:, fix_gens] + p_gen.loc[:, fix_gens]
             <= n.generators.loc[fix_gens, "p_nom"],
             name="Gen-headroom-fix",
@@ -2894,7 +2895,7 @@ def nminus1_constraint(n: pypsa.Network):
         n.generators.p_nom_extendable & (n.generators.carrier != "solar")
     ].index
     if not ext_thermal.empty:
-        n.model.add_constraints(
+        m.add_constraints(
             r_gen.loc[:, ext_thermal]
             + p_gen.loc[:, ext_thermal]
             - p_nom_gen.loc[ext_thermal]
@@ -2905,7 +2906,7 @@ def nminus1_constraint(n: pypsa.Network):
     pv_gens = n.generators[n.generators.carrier == "solar"].index
     if not pv_gens.empty:
         p_max_pu = n.generators_t.p_max_pu[pv_gens]
-        n.model.add_constraints(
+        m.add_constraints(
             r_gen.loc[:, pv_gens]
             + p_gen.loc[:, pv_gens]
             - p_nom_gen.loc[pv_gens] * p_max_pu
@@ -2914,28 +2915,24 @@ def nminus1_constraint(n: pypsa.Network):
         )
     #
     thermal_gens = n.generators[n.generators.carrier != "solar"].index
-    n.model.add_constraints(
+    m.add_constraints(
         r_gen.loc[:, thermal_gens] <= 1.0 * p_gen.loc[:, thermal_gens],
         name="Thermal-spinning-limit",
     )
     #
     # Storage Reserve Constraints
     tau = 0.5
-    n.model.add_constraints(
-        r_stor + p_disp - p_nom_stor <= 0, name="Storage-inverter-cap"
-    )
-    n.model.add_constraints(
+    m.add_constraints(r_stor + p_disp - p_nom_stor <= 0, name="Storage-inverter-cap")
+    m.add_constraints(
         r_stor + p_disp - p_store - p_nom_stor <= 0, name="Storage-shift-cap"
     )
-    n.model.add_constraints(r_stor * tau <= soc, name="Storage-soc-reservation")
+    m.add_constraints(r_stor * tau <= soc, name="Storage-soc-reservation")
     #
     # Unified N-1 Contingencies
     total_system_reserve = r_gen.sum("name") + r_stor.sum("name")
     #
-    n.model.add_constraints(
-        total_system_reserve - r_gen >= p_gen, name="N-1-gen-contingency"
-    )
-    n.model.add_constraints(
+    m.add_constraints(total_system_reserve - r_gen >= p_gen, name="N-1-gen-contingency")
+    m.add_constraints(
         total_system_reserve - r_stor >= p_disp, name="N-1-storage-contingency"
     )
     #
