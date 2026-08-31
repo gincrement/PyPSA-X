@@ -66,6 +66,8 @@ them to ensure that only one of them can be in operation;
 power output;
 - **hourly match**: add constraints to fullfil given hourly matching constraints by e.g., year,
 month, week, day, and hour
+- **block decision**: add constraints to limit dispatch decisions to be every x hours instead
+of hourly
 
 ## Installation
 
