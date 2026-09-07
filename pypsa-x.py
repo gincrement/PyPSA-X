@@ -133,7 +133,7 @@ if find_spec("pypsa"):
     #
     # make sure to use the new API
     pypsa.options.set_option("api.new_components_api", True)
-    pypsa.options.set_option("api.legacy_string_dtype", str)
+    pypsa.options.set_option("api.legacy_string_dtype", False)
     pypsa.options.set_option("params.statistics.nice_names", False)
     pypsa.options.set_option("params.statistics.drop_zero", True)
     pypsa.options.set_option("params.statistics.round", 2)
