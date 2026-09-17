@@ -45,6 +45,7 @@ import argparse
 if find_spec("pypsa"):
     import pandas as pd
     import numpy as np
+    import xarray as xr
     import networkx as nx
     import pypsa
     import sys
@@ -2852,93 +2853,6 @@ def block_constraints(n: pypsa.Network):
             )
 
 
-def nminus1_constraint(n: pypsa.Network):
-    """
-    Adds constraints for N-1 operation of generators and storage units.
-
-    Parameters
-    ----------
-    n: pypsa.Network
-        PyPSA network to get the details from.
-
-    Returns
-    -------
-    None
-    """
-    #
-    sns = n.snapshots
-    m = n.model
-    p_gen = m.variables["Generator-p"]
-    p_nom_gen = m.variables["Generator-p_nom"]
-    r_gen = m.add_variables(
-        lower=0, coords=[sns, n.generators.index], name="Generator-reserve"
-    )
-    #
-    p_disp = m.variables["StorageUnit-p_dispatch"]
-    p_store = m.variables["StorageUnit-p_store"]
-    soc = m.variables["StorageUnit-state_of_charge"]
-    p_nom_stor = m.variables["StorageUnit-p_nom"]
-    r_stor = m.add_variables(
-        lower=0, coords=[sns, n.storage_units.index], name="StorageUnit-reserve"
-    )
-    #
-    # Headroom Constraints
-    fix_gens = n.generators[~n.generators.p_nom_extendable].index
-    if not fix_gens.empty:
-        m.add_constraints(
-            r_gen.loc[:, fix_gens] + p_gen.loc[:, fix_gens]
-            <= n.generators.loc[fix_gens, "p_nom"],
-            name="Gen-headroom-fix",
-        )
-    #
-    ext_thermal = n.generators[
-        n.generators.p_nom_extendable & (n.generators.carrier != "solar")
-    ].index
-    if not ext_thermal.empty:
-        m.add_constraints(
-            r_gen.loc[:, ext_thermal]
-            + p_gen.loc[:, ext_thermal]
-            - p_nom_gen.loc[ext_thermal]
-            <= 0,
-            name="Gen-headroom-ext-thermal",
-        )
-    #
-    pv_gens = n.generators[n.generators.carrier == "solar"].index
-    if not pv_gens.empty:
-        p_max_pu = n.generators_t.p_max_pu[pv_gens]
-        m.add_constraints(
-            r_gen.loc[:, pv_gens]
-            + p_gen.loc[:, pv_gens]
-            - p_nom_gen.loc[pv_gens] * p_max_pu
-            <= 0,
-            name="Gen-headroom-solar",
-        )
-    #
-    thermal_gens = n.generators[n.generators.carrier != "solar"].index
-    m.add_constraints(
-        r_gen.loc[:, thermal_gens] <= 1.0 * p_gen.loc[:, thermal_gens],
-        name="Thermal-spinning-limit",
-    )
-    #
-    # Storage Reserve Constraints
-    tau = 0.5
-    m.add_constraints(r_stor + p_disp - p_nom_stor <= 0, name="Storage-inverter-cap")
-    m.add_constraints(
-        r_stor + p_disp - p_store - p_nom_stor <= 0, name="Storage-shift-cap"
-    )
-    m.add_constraints(r_stor * tau <= soc, name="Storage-soc-reservation")
-    #
-    # Unified N-1 Contingencies
-    total_system_reserve = r_gen.sum("name") + r_stor.sum("name")
-    #
-    m.add_constraints(total_system_reserve - r_gen >= p_gen, name="N-1-gen-contingency")
-    m.add_constraints(
-        total_system_reserve - r_stor >= p_disp, name="N-1-storage-contingency"
-    )
-    #
-    return None
-
-
 def reserve_constraints(
     n: pypsa.Network,
 ) -> None:
@@ -3394,8 +3308,429 @@ def add_maintenance_constraints(
     return None
 
 
+# TODO
+# def dense(n, attr, sns):
+#     return n.get_switchable_as_dense("Generator", attr, sns)
+
+# def da(df):
+#     df = df.copy()
+#     df.columns.name = "name"
+#     df.index.name = "snapshot"
+#     return xr.DataArray(df)
+
+
+# --------------------------------------------------------------------------- #
+# helpers for add_primary_reserves()
+# --------------------------------------------------------------------------- #
+def _static(n: pypsa.Network, ctype: str) -> pd.DataFrame:
+    return n.components[ctype].static
+
+
+def _as_dense(n: pypsa.Network, ctype: str, attr: str, sns) -> pd.DataFrame:
+    c = n.components[ctype]
+    if hasattr(c, "as_dynamic"):  # v2 API
+        return c.as_dynamic(attr, sns)
+    return n.get_switchable_as_dense(ctype, attr, sns)  # legacy fallback
+
+
+def _to_da(df: pd.DataFrame, sns, idx: pd.Index) -> xr.DataArray:
+    return xr.DataArray(
+        np.asarray(df.loc[sns, idx], dtype=float),
+        coords=[sns, idx],
+        dims=["snapshot", "name"],
+    )
+
+
+def _const(s: pd.Series, idx: pd.Index) -> xr.DataArray:
+    return xr.DataArray(np.asarray(s[idx], dtype=float), coords=[idx], dims=["name"])
+
+
+def _param(val, idx: pd.Index, default=None) -> xr.DataArray:
+    """Scalar or per-unit mapping -> DataArray over `name`."""
+    if isinstance(val, (pd.Series, dict)):
+        s = pd.Series(val, dtype=float).reindex(idx)
+        if default is not None:
+            s = s.fillna(float(default))
+        if s.isna().any():
+            raise ValueError(f"missing value for {list(idx[s.isna()])}")
+    else:
+        s = pd.Series(float(val), index=idx)
+    return xr.DataArray(s.to_numpy(float), coords=[idx], dims=["name"])
+
+
+def _sel(var, sns, n, **kw):
+    """Select a name subset and, if needed, a snapshot subset of a linopy variable."""
+    v = var.sel(**kw)
+    if len(sns) != len(n.snapshots):
+        v = v.sel(snapshot=sns)
+    return v
+
+
+def _check(n, ctype, idx):
+    missing = idx.difference(_static(n, ctype).index)
+    if len(missing):
+        raise KeyError(f"unknown {ctype}: {list(missing)}")
+
+
+def add_primary_reserves(
+    n: pypsa.Network,
+    # TODO move them into the PyPSA network or at least into the Assumption Book
+    cost=2.0,  # EUR/MW per snapshot; scalar or per-unit mapping
+    dur_min: float = 15.0,  # minutes the reserve must be sustained
+    ramp_pu_per_min: float = 0.05,  # generators
+    storage_ramp_pu_per_min=0.20,  # storage units; None = no ramp limit
+    h_min: float | None = None,  # MWs of required system inertia
+    inertia=None,  # pd.Series of H [s], indexed by unit name
+    big_m: float | None = None,  # fallback cap for committable+extendable gens
+    store_p_nom=None,  # MW rating of Store units (they have none in PyPSA)
+) -> None:
+    #
+    col = "_rm_participation"
+    #
+    generators = []
+    storage_units = []
+    stores = []
+    #
+    if col in n.c["Generator"].static.columns:
+        generators = (
+            n.c["Generator"].static.index[n.c["Generator"].static[col]].to_list()
+        )
+    #
+    if col in n.c["StorageUnit"].static:
+        storage_units = (
+            n.c["StorageUnit"].static.index[n.c["StorageUnit"].static[col]].to_list()
+        )
+    #
+    if col in n.c["Store"].static:
+        stores = n.c["Store"].static.index[n.c["Store"].static[col]].to_list()
+    #
+    m = n.model
+    sns = n.snapshots
+    dur_h = float(dur_min) / 60.0
+    obj = 0
+    blocks = []  # one entry per component: {"ru": var, "p": expr at risk, "tag": str}
+    #
+    # ======================================================================= #
+    # generators
+    # ======================================================================= #
+    idx = pd.Index(generators, name="name")
+    if len(idx):
+        _check(n, "Generator", idx)
+        g = _static(n, "Generator").loc[idx]
+        ext = g.p_nom_extendable.astype(bool)
+        com = (
+            g.committable.astype(bool)
+            if "committable" in g
+            else pd.Series(False, index=idx)
+        )
+        fix = ~ext
+        #
+        i_ext, i_com = idx[ext], idx[com]
+        i_fix_only = idx[fix & ~com]
+        i_com_ext, i_com_fix = idx[com & ext], idx[com & fix]
+        #
+        cap = g.p_nom.where(fix, g.p_nom_max)  # big-M capacity
+        if big_m is not None:
+            cap = cap.replace(np.inf, big_m)
+        if len(i_com_ext) and not np.isfinite(cap[i_com_ext]).all():
+            bad = list(i_com_ext[~np.isfinite(cap[i_com_ext])])
+            raise ValueError(
+                "committable + extendable generators need a finite p_nom_max "
+                f"or an explicit big_m: {bad}"
+            )
+        #
+        k = float(ramp_pu_per_min) * float(dur_min)  # p.u. of p_nom within dur_min
+        if k <= 0:
+            raise ValueError("ramp_pu_per_min * dur_min must be positive")
+        #
+        ru = m.add_variables(lower=0, coords=[sns, idx], name="Generator-r_up")
+        p = _sel(m.variables["Generator-p"], sns, n, name=idx)
+        pmax = _to_da(_as_dense(n, "Generator", "p_max_pu", sns), sns, idx)
+        p_nom = m.variables["Generator-p_nom"] if len(i_ext) else None
+        st = (
+            _sel(m.variables["Generator-status"], sns, n, name=i_com)
+            if len(i_com)
+            else None
+        )
+        #
+        # headroom: p + r_up <= p_max_pu * p_nom * status
+        if len(i_fix_only):
+            m.add_constraints(
+                p.sel(name=i_fix_only) + ru.sel(name=i_fix_only)
+                <= pmax.sel(name=i_fix_only) * _const(g.p_nom, i_fix_only),
+                name="Reserve-headroom_fix",
+            )
+        if len(i_ext):
+            m.add_constraints(
+                p.sel(name=i_ext)
+                + ru.sel(name=i_ext)
+                - pmax.sel(name=i_ext) * p_nom.sel(name=i_ext)
+                <= 0,
+                name="Reserve-headroom_ext",
+            )
+        if len(i_com):
+            m.add_constraints(
+                p.sel(name=i_com)
+                + ru.sel(name=i_com)
+                - (pmax.sel(name=i_com) * _const(cap, i_com)) * st
+                <= 0,
+                name="Reserve-headroom_status",
+            )
+        #
+        # ramp limit: r_up <= k * p_nom * status
+        if len(i_fix_only):
+            m.add_constraints(
+                ru.sel(name=i_fix_only) <= k * _const(g.p_nom, i_fix_only),
+                name="Reserve-ramp_limit_fix",
+            )
+        if len(i_ext):
+            m.add_constraints(
+                ru.sel(name=i_ext) - k * p_nom.sel(name=i_ext) <= 0,
+                name="Reserve-ramp_limit_ext",
+            )
+        if len(i_com):
+            m.add_constraints(
+                ru.sel(name=i_com) - (k * _const(cap, i_com)) * st <= 0,
+                name="Reserve-ramp_limit_status",
+            )
+        #
+        obj = obj + (_param(cost, idx) * ru).sum()
+        blocks.append({"ru": ru, "p": p, "tag": "gen"})
+    #
+    # ======================================================================= #
+    # storage units  (discharge headroom + backed-off charging, energy limited)
+    # ======================================================================= #
+    sidx = pd.Index(storage_units, name="name")
+    if len(sidx):
+        _check(n, "StorageUnit", sidx)
+        s = _static(n, "StorageUnit").loc[sidx]
+        sext = s.p_nom_extendable.astype(bool)
+        i_sext, i_sfix = sidx[sext], sidx[~sext]
+        #
+        ru_s = m.add_variables(lower=0, coords=[sns, sidx], name="StorageUnit-r_up")
+        pdis = _sel(m.variables["StorageUnit-p_dispatch"], sns, n, name=sidx)
+        psto = _sel(m.variables["StorageUnit-p_store"], sns, n, name=sidx)
+        soc = _sel(m.variables["StorageUnit-state_of_charge"], sns, n, name=sidx)
+        pmax_s = _to_da(_as_dense(n, "StorageUnit", "p_max_pu", sns), sns, sidx)
+        s_nom = m.variables["StorageUnit-p_nom"] if len(i_sext) else None
+        #
+        # power: p_dispatch + r_up - p_store <= p_max_pu * p_nom
+        # (reserve may be delivered by ramping up discharge *or* stopping charging)
+        if len(i_sfix):
+            m.add_constraints(
+                pdis.sel(name=i_sfix) + ru_s.sel(name=i_sfix) - psto.sel(name=i_sfix)
+                <= pmax_s.sel(name=i_sfix) * _const(s.p_nom, i_sfix),
+                name="Reserve-su_headroom_fix",
+            )
+        if len(i_sext):
+            m.add_constraints(
+                pdis.sel(name=i_sext)
+                + ru_s.sel(name=i_sext)
+                - psto.sel(name=i_sext)
+                - pmax_s.sel(name=i_sext) * s_nom.sel(name=i_sext)
+                <= 0,
+                name="Reserve-su_headroom_ext",
+            )
+        #
+        # energy: delivering r_up for dur_h hours must be covered by the SOC
+        m.add_constraints(
+            dur_h * ru_s - _const(s.efficiency_dispatch, sidx) * soc <= 0,
+            name="Reserve-su_energy",
+        )
+        #
+        # optional converter ramp limit
+        if storage_ramp_pu_per_min is not None:
+            ks = _param(storage_ramp_pu_per_min, sidx) * float(dur_min)
+            if len(i_sfix):
+                m.add_constraints(
+                    ru_s.sel(name=i_sfix)
+                    <= ks.sel(name=i_sfix) * _const(s.p_nom, i_sfix),
+                    name="Reserve-su_ramp_limit_fix",
+                )
+            if len(i_sext):
+                m.add_constraints(
+                    ru_s.sel(name=i_sext) - ks.sel(name=i_sext) * s_nom.sel(name=i_sext)
+                    <= 0,
+                    name="Reserve-su_ramp_limit_ext",
+                )
+        #
+        obj = obj + (_param(cost, sidx) * ru_s).sum()
+        blocks.append({"ru": ru_s, "p": pdis - psto, "tag": "su"})
+    #
+    # ======================================================================= #
+    # stores  (no p_nom in PyPSA -> rating must be supplied; energy limited)
+    # ======================================================================= #
+    eidx = pd.Index(stores, name="name")
+    if len(eidx):
+        _check(n, "Store", eidx)
+        e_s = _static(n, "Store").loc[eidx]
+        eext = e_s.e_nom_extendable.astype(bool)
+        i_eext, i_efix = eidx[eext], eidx[~eext]
+
+        ru_e = m.add_variables(lower=0, coords=[sns, eidx], name="Store-r_up")
+        pe = _sel(m.variables["Store-p"], sns, n, name=eidx)
+        en = _sel(m.variables["Store-e"], sns, n, name=eidx)
+        emin = _to_da(_as_dense(n, "Store", "e_min_pu", sns), sns, eidx)
+        e_nom = m.variables["Store-e_nom"] if len(i_eext) else None
+
+        # power rating (a Store's power is limited by whatever link feeds it)
+        if store_p_nom is not None:
+            m.add_constraints(
+                pe + ru_e <= _param(store_p_nom, eidx), name="Reserve-store_headroom"
+            )
+        #
+        # energy: r_up * dur_h <= e - e_min_pu * e_nom
+        if len(i_efix):
+            m.add_constraints(
+                dur_h * ru_e.sel(name=i_efix) - en.sel(name=i_efix)
+                <= -emin.sel(name=i_efix) * _const(e_s.e_nom, i_efix),
+                name="Reserve-store_energy_fix",
+            )
+        if len(i_eext):
+            m.add_constraints(
+                dur_h * ru_e.sel(name=i_eext)
+                - en.sel(name=i_eext)
+                + emin.sel(name=i_eext) * e_nom.sel(name=i_eext)
+                <= 0,
+                name="Reserve-store_energy_ext",
+            )
+        #
+        obj = obj + (_param(cost, eidx) * ru_e).sum()
+        blocks.append({"ru": ru_e, "p": pe, "tag": "store"})
+    #
+    if not blocks:
+        raise ValueError("no reserve providers given")
+    #
+    # ======================================================================= #
+    # N-1: the pooled reserve, minus the lost unit's own reserve, covers its output
+    # ======================================================================= #
+    total = blocks[0]["ru"].sum("name")
+    for b in blocks[1:]:
+        total = total + b["ru"].sum("name")
+    for b in blocks:
+        m.add_constraints(total - b["ru"] - b["p"] >= 0, name=f"Reserve-N-1_{b['tag']}")
+
+    # ======================================================================= #
+    # inertia:  sum_i H_i * p_nom_i * status_i >= h_min
+    # ======================================================================= #
+    if h_min is not None:
+        if inertia is None:
+            raise ValueError("inertia must be given when h_min is set")
+        H = pd.Series(inertia, dtype=float)
+        terms, offset = [], 0.0
+
+        if len(idx):
+            Hg = H.reindex(idx)
+            if Hg.isna().any():
+                raise ValueError(f"missing inertia for {list(idx[Hg.isna()])}")
+
+            if len(i_fix_only):  # always on, fixed -> constant
+                offset += float((Hg[i_fix_only] * g.p_nom[i_fix_only]).sum())
+
+            i_on_ext = idx[ext & ~com]  # always on, extendable
+            if len(i_on_ext):
+                terms.append(
+                    (_const(Hg, i_on_ext) * p_nom.sel(name=i_on_ext)).sum("name")
+                )
+
+            if len(i_com_fix):  # committable, fixed
+                terms.append(
+                    (_const(Hg * g.p_nom, i_com_fix) * st.sel(name=i_com_fix)).sum(
+                        "name"
+                    )
+                )
+
+            if len(i_com_ext):  # bilinear -> McCormick on z
+                z = m.add_variables(
+                    lower=0, coords=[sns, i_com_ext], name="Generator-p_nom_on"
+                )
+                pn_ce, st_ce = p_nom.sel(name=i_com_ext), st.sel(name=i_com_ext)
+                cap_ce = _const(cap, i_com_ext)
+                m.add_constraints(z - pn_ce <= 0, name="Reserve-p_nom_on_cap")
+                m.add_constraints(z - cap_ce * st_ce <= 0, name="Reserve-p_nom_on_off")
+                m.add_constraints(
+                    z - pn_ce - cap_ce * st_ce >= -cap_ce, name="Reserve-p_nom_on_lb"
+                )
+                terms.append((_const(Hg, i_com_ext) * z).sum("name"))
+
+        # storage units: synthetic/grid-forming inertia, no commitment variable,
+        # so the contribution is available whenever the converter capacity exists
+        if len(sidx):
+            Hs = H.reindex(sidx).fillna(0.0)
+            if (Hs[i_sfix] != 0).any():
+                offset += float((Hs[i_sfix] * s.p_nom[i_sfix]).sum())
+            i_h_ext = i_sext[Hs[i_sext] != 0]
+            if len(i_h_ext):
+                terms.append(
+                    (_const(Hs, i_h_ext) * s_nom.sel(name=i_h_ext)).sum("name")
+                )
+
+        if terms:
+            lhs = terms[0]
+            for t in terms[1:]:
+                lhs = lhs + t
+            m.add_constraints(lhs >= float(h_min) - offset, name="Reserve-inertia")
+        elif offset < float(h_min):
+            raise ValueError(
+                f"inertia requirement {h_min} MWs exceeds the fixed fleet ({offset} MWs)"
+            )
+
+    # ======================================================================= #
+    # cost of holding reserve
+    # (multiply by n.snapshot_weightings.objective.loc[sns] if you want it weighted)
+    # ======================================================================= #
+    m.objective += obj
+
+
+def add_startup_types(
+    n: pypsa.Network,
+    sns,
+    types,
+) -> None:
+    """
+    Add hot and warm startup into PyPSA.
+        _maint_duration   ?????
+
+    Parameters
+    ----------
+    n: pypsa.Network
+        PyPSA network to get the details from.
+
+    Returns
+    -------
+    None
+    """
+    #
+    col = "_rm_participation"
+    units = ()
+    #
+    if col in n.generators.static.columns:
+        units = n.generators.static.index[
+            n.generators.static["_rm_participation"]
+        ].to_list()
+    #
+    m = n.model
+    idx = pd.Index(units, name="name")
+    su = m["Generator-start_up"].sel(name=idx)
+    st = m["Generator-status"].sel(name=idx)
+    warmer, c_cold = [], [c for lab, _, _, c in types if lab == "cold"][0]
+    for label, t0, t1, cost in types:
+        if label == "cold":
+            continue
+        d = m.add_variables(
+            lower=0, upper=1, coords=[sns, idx], name=f"Generator-start_{label}"
+        )
+        window = sum(st.shift(snapshot=i) for i in range(t0 + 1, t1 + 1))
+        m.add_constraints(d - window <= 0, name=f"Startup-{label}_window")
+        warmer.append((d, cost))
+    m.add_constraints(sum(d for d, _ in warmer) - su <= 0, name="Startup-exclusive")
+    m.objective += (c_cold * su).sum() + sum(
+        ((c - c_cold) * d).sum() for d, c in warmer
+    )
+
+
 def extra_functionalities(
-    n: pypsa.Network, snapshots: pd.core.indexes.datetimes.DatetimeIndex
+    n: pypsa.Network, sns: pd.core.indexes.datetimes.DatetimeIndex
 ) -> None:
     """
     Adds extra functionalities into the PyPSA model above the features provided
@@ -3406,7 +3741,7 @@ def extra_functionalities(
     n: pypsa.Network
         PyPSA network to get the details from.
 
-    snapshots: pd.core.indexes.datetimes.DatetimeIndex
+    sns: pd.core.indexes.datetimes.DatetimeIndex
         Snapshots being considered in the current PyPSA model.
 
     Returns
@@ -3447,10 +3782,18 @@ def extra_functionalities(
         #
         if eval(globals()["nminus1_activate"]):
             if not n.has_scenarios:
-                nminus1_constraint(n)
+                # equivalent to N-1 from generation perspective
+                add_primary_reserves(n)
     #
     if (eval(globals()["run_mga_runs"])) and (globals()["mga_slack"] > 0):
         mga_settings(n)
+    #
+    # TODO 'statup_types' needs to come from assumption file
+    startup_types = [
+        ("hot", 1, 3, 200.0),
+        ("warm", 3, 8, 800.0),
+        ("cold", 8, None, 2500.0),
+    ]
     #
     # MILP functionalities
     if eval(globals()["do_milp_constraints"]):
@@ -3471,6 +3814,9 @@ def extra_functionalities(
             add_maintenance_constraints(n, globals()["maintenance_mode"])
         #
         force_single_technology_operation(n)
+        #
+        # TODO 'statup_types' needs to come from assumption file
+        add_startup_types(n, sns, startup_types)
     #
     print("")
     return None
@@ -3493,6 +3839,7 @@ def check_oetc_usage(
         Dictionary of keyword arguments.
     """
     #
+    globals()["use_oetc"] = "False"
     if eval(globals()["use_oetc"]):
         try:
             print("info! try to initiate OETC ...")
@@ -3519,12 +3866,60 @@ def check_oetc_usage(
         #
         except Exception as e:
             print(f"info! not able to initiate OETC\n{e}")
-            globals()["solver_name"] = "highs"
-            globals()["use_oetc"] = "False"
+            #
+            try:
+                import gurobipy as gp
+                from gurobipy import GRB
+
+                with gp.Env() as env, gp.Model(env=env) as m:
+                    env.setParam("OutputFlag", 0)
+                    env.setParam("LogToConsole", 0)
+                    env.start()
+                    # source: https://www.gurobi.com/documentation/9.5/quickstart_mac/cs_example_mip1_py.html
+                    m = gp.Model("mip1", env=env)
+                    x = m.addVar(vtype=GRB.BINARY, name="x")
+                    y = m.addVar(vtype=GRB.BINARY, name="y")
+                    z = m.addVar(vtype=GRB.BINARY, name="z")
+                    m.setObjective(x + y + 2 * z, GRB.MAXIMIZE)
+                    m.addConstr(x + 2 * y + 3 * z <= 4, "c0")
+                    m.addConstr(x + y >= 1, "c1")
+                    m.optimize()
+                    del env, m, x, y, z
+                    globals()["solver_name"] = "gurobi"
+                    globals()["use_oetc"] = "False"
+            #
+            except ValueError:
+                globals()["solver_name"] = "highs"
+                globals()["use_oetc"] = "False"
     #
     else:
         print("info! use local solver")
-        globals()["solver_name"] = "highs"
+        #
+        try:
+            import gurobipy as gp
+            from gurobipy import GRB
+
+            #
+            with gp.Env() as env, gp.Model(env=env) as m:
+                env.setParam("OutputFlag", 0)
+                env.setParam("LogToConsole", 0)
+                env.start()
+                # source: https://www.gurobi.com/documentation/9.5/quickstart_mac/cs_example_mip1_py.html
+                m = gp.Model("mip1", env=env)
+                x = m.addVar(vtype=GRB.BINARY, name="x")
+                y = m.addVar(vtype=GRB.BINARY, name="y")
+                z = m.addVar(vtype=GRB.BINARY, name="z")
+                m.setObjective(x + y + 2 * z, GRB.MAXIMIZE)
+                m.addConstr(x + 2 * y + 3 * z <= 4, "c0")
+                m.addConstr(x + y >= 1, "c1")
+                m.optimize()
+                del env, m, x, y, z
+                globals()["solver_name"] = "gurobi"
+                globals()["use_oetc"] = "False"
+        #
+        except ValueError:
+            globals()["solver_name"] = "highs"
+            globals()["use_oetc"] = "False"
     #
     kwargs["solver_options"] = get_solver_setting()
     print(f"info! solver to use: {globals()['solver_name']}\n")
