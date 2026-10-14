@@ -139,6 +139,7 @@ if find_spec("pypsa"):
     pypsa.options.set_option("params.statistics.drop_zero", True)
     pypsa.options.set_option("params.statistics.round", 2)
     pypsa.options.set_option("debug.runtime_verification", False)
+    # linopy.options["semantics"] = "v1"
     #
     if version.parse(PYPSA_VERSION) < version.parse(PYPSA_VERSION_NEEDED):
         print(
@@ -2569,60 +2570,6 @@ def force_technology_capacity(
     return None
 
 
-def force_single_technology_operation(
-    n: pypsa.Network,
-) -> None:
-    """
-    Limits the operation of technology options to replicate part-load behaviour.
-    The following column in the individual DataFrames needs to be defined:
-        _limit_single_operation
-
-    Hint: all this technology options need to have committable = True !
-
-    Parameters
-    ----------
-    n: pypsa.Network
-        PyPSA network to get the details from.
-
-    Returns
-    -------
-    None
-    """
-    #
-    m = n.model
-    comps = pypsa.descriptors.nominal_attrs
-    col = "_limit_single_operation"
-    #
-    # loop through all components
-    for c in comps:
-        df = n.c[c].static
-        #
-        if col in df.columns:
-            if df[df[col].fillna("") > ""][col].unique().any():
-                for tech in df[df[col] > ""][col].unique():
-                    constr_name = f"Max-single-operation-{tech}"
-                    #
-                    # loop through all technology options of the individual class
-                    techs = []
-                    for t, row in df[(df[col] == tech) & df["committable"]].iterrows():
-                        techs.append(t)
-                    #
-                    for t, row in df[
-                        (df[col] == tech) & (not df["committable"])
-                    ].iterrows():
-                        print(f"... option {c}.{t} not used as committable is False")
-                    #
-                    if len(techs):
-                        # get status variable
-                        nom_col = "status"
-                        status_vars = m.variables[f"{c}-{nom_col}"].loc[:, techs]
-                        operating_count = status_vars.sum(dim="name")
-                        m.add_constraints(operating_count <= 1, name=constr_name)
-                        print(f"x) added constraint {constr_name}")
-    #
-    return None
-
-
 def mga_settings(
     n: pypsa.Network,
 ) -> None:
@@ -3308,17 +3255,6 @@ def add_maintenance_constraints(
     return None
 
 
-# TODO
-# def dense(n, attr, sns):
-#     return n.get_switchable_as_dense("Generator", attr, sns)
-
-# def da(df):
-#     df = df.copy()
-#     df.columns.name = "name"
-#     df.index.name = "snapshot"
-#     return xr.DataArray(df)
-
-
 # --------------------------------------------------------------------------- #
 # helpers for add_primary_reserves()
 # --------------------------------------------------------------------------- #
@@ -3788,13 +3724,6 @@ def extra_functionalities(
     if (eval(globals()["run_mga_runs"])) and (globals()["mga_slack"] > 0):
         mga_settings(n)
     #
-    # TODO 'statup_types' needs to come from assumption file
-    startup_types = [
-        ("hot", 1, 3, 200.0),
-        ("warm", 3, 8, 800.0),
-        ("cold", 8, None, 2500.0),
-    ]
-    #
     # MILP functionalities
     if eval(globals()["do_milp_constraints"]):
         print("add MILP constraints if/as needed ...\n")
@@ -3813,13 +3742,45 @@ def extra_functionalities(
         if eval(globals()["do_maintenance_planing"]):
             add_maintenance_constraints(n, globals()["maintenance_mode"])
         #
-        force_single_technology_operation(n)
-        #
         # TODO 'statup_types' needs to come from assumption file
+        startup_types = [
+            ("hot", 1, 3, 200.0),
+            ("warm", 3, 8, 800.0),
+            ("cold", 8, None, 2500.0),
+        ]
         add_startup_types(n, sns, startup_types)
     #
     print("")
     return None
+
+
+def is_gurobi_configured():
+    try:
+        import gurobipy as gp
+        from gurobipy import GRB
+
+        with gp.Env() as env, gp.Model(env=env) as m:
+            env.setParam("OutputFlag", 0)
+            env.setParam("LogToConsole", 0)
+            env.start()
+            # source: https://www.gurobi.com/documentation/9.5/quickstart_mac/cs_example_mip1_py.html
+            m = gp.Model("mip1", env=env)
+            x = m.addVar(vtype=GRB.BINARY, name="x")
+            y = m.addVar(vtype=GRB.BINARY, name="y")
+            z = m.addVar(vtype=GRB.BINARY, name="z")
+            m.setObjective(x + y + 2 * z, GRB.MAXIMIZE)
+            m.addConstr(x + 2 * y + 3 * z <= 4, "c0")
+            m.addConstr(x + y >= 1, "c1")
+            m.optimize()
+            del env, m, x, y, z
+            solver_name = "gurobi"
+            use_oetc = "False"
+    #
+    except ValueError:
+        solver_name = "highs"
+        use_oetc = "False"
+    #
+    return (solver_name, use_oetc)
 
 
 def check_oetc_usage(
@@ -3867,59 +3828,12 @@ def check_oetc_usage(
         except Exception as e:
             print(f"info! not able to initiate OETC\n{e}")
             #
-            try:
-                import gurobipy as gp
-                from gurobipy import GRB
-
-                with gp.Env() as env, gp.Model(env=env) as m:
-                    env.setParam("OutputFlag", 0)
-                    env.setParam("LogToConsole", 0)
-                    env.start()
-                    # source: https://www.gurobi.com/documentation/9.5/quickstart_mac/cs_example_mip1_py.html
-                    m = gp.Model("mip1", env=env)
-                    x = m.addVar(vtype=GRB.BINARY, name="x")
-                    y = m.addVar(vtype=GRB.BINARY, name="y")
-                    z = m.addVar(vtype=GRB.BINARY, name="z")
-                    m.setObjective(x + y + 2 * z, GRB.MAXIMIZE)
-                    m.addConstr(x + 2 * y + 3 * z <= 4, "c0")
-                    m.addConstr(x + y >= 1, "c1")
-                    m.optimize()
-                    del env, m, x, y, z
-                    globals()["solver_name"] = "gurobi"
-                    globals()["use_oetc"] = "False"
-            #
-            except ValueError:
-                globals()["solver_name"] = "highs"
-                globals()["use_oetc"] = "False"
+            globals()["solver_name"], globals()["use_oetc"] = is_gurobi_configured()
     #
     else:
         print("info! use local solver")
         #
-        try:
-            import gurobipy as gp
-            from gurobipy import GRB
-
-            #
-            with gp.Env() as env, gp.Model(env=env) as m:
-                env.setParam("OutputFlag", 0)
-                env.setParam("LogToConsole", 0)
-                env.start()
-                # source: https://www.gurobi.com/documentation/9.5/quickstart_mac/cs_example_mip1_py.html
-                m = gp.Model("mip1", env=env)
-                x = m.addVar(vtype=GRB.BINARY, name="x")
-                y = m.addVar(vtype=GRB.BINARY, name="y")
-                z = m.addVar(vtype=GRB.BINARY, name="z")
-                m.setObjective(x + y + 2 * z, GRB.MAXIMIZE)
-                m.addConstr(x + 2 * y + 3 * z <= 4, "c0")
-                m.addConstr(x + y >= 1, "c1")
-                m.optimize()
-                del env, m, x, y, z
-                globals()["solver_name"] = "gurobi"
-                globals()["use_oetc"] = "False"
-        #
-        except ValueError:
-            globals()["solver_name"] = "highs"
-            globals()["use_oetc"] = "False"
+        globals()["solver_name"], globals()["use_oetc"] = is_gurobi_configured()
     #
     kwargs["solver_options"] = get_solver_setting()
     print(f"info! solver to use: {globals()['solver_name']}\n")

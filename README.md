@@ -1,4 +1,4 @@
-<!--
+part-load<!--
 SPDX-FileCopyrightText: PyPSA-X Contributors
 SPDX-License-Identifier: MIT
 -->
@@ -60,17 +60,15 @@ maintenance cost;
 by generators, storage units or stores;
 - **limit operating hours**: option to limit the operation of e.g., emergency technology towards a
 predefined number of hours (e.g., 3 h/a);
+- **cost for changing output**: add additional cost above the marginal cost for changing the
+power output;
+- **block decision**: limit dispatch decisions to be every x hours instead of every timestep
+(e.g. hourly);
 
 ### DRAFT:
 - **reserve margin**: adds a preliminary version of operational reserve considerations;
-- **part-load operation**: mimic part-load operation by defining multiple options and linking
-them to ensure that only one of them can be in operation;
-- **cost for changing output**: add additional cost above the marginal cost for changing the
-power output;
 - **hourly match**: fullfil given hourly matching constraints by e.g., year, month, week, day,
 and hour;
-- **block decision**: limit dispatch decisions to be every x hours instead of every timestep
-(e.g. hourly);
 - **"primary reserve**: add constraints to add primary reserve capacity;
 - **hot, warm, cold startup**: add hot, warm, and cold startup cost considerations;
 
