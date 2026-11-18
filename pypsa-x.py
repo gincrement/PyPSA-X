@@ -56,8 +56,8 @@ else:
     print("error! PyPSA is not installed\n")
     sys.exit(-1)
 #
-default_excel_filename = "PyPSA_PtX_AB_default.xlsx"
-__version__ = "0.9.3-dev"
+default_case_dir = "cases/default"
+__version__ = "0.9.3"
 #
 headers = [
     "",
@@ -88,25 +88,6 @@ headers = [
     "",
 ]
 #
-for header in headers:
-    print(header)
-#
-# check provided arguments on the command line
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--import_xls", type=str, help="File to read configuration and setting from."
-)
-args = parser.parse_args()
-#
-excel_filename = default_excel_filename
-if args.import_xls:
-    excel_filename = args.import_xls
-#
-if excel_filename != "none" and not os.path.exists(excel_filename):
-    print(f'error! provided input file does not exist: "{excel_filename}"')
-    print(f'fallback to default input file: "{default_excel_filename}"\n')
-    sys.exit(-1)
-#
 deactivate_network_viewers = True
 #
 if find_spec("pypsa"):
@@ -125,6 +106,12 @@ if find_spec("pypsa"):
     import tempfile
     import warnings
     import logging
+    import ast
+    import json
+    import re
+    import datetime as _dt
+    import jsonschema
+    import yaml
 
     #
     PYPSA_VERSION = importlib.metadata.version("pypsa")
@@ -209,6 +196,86 @@ if deactivate_network_viewers:
     networkx_viewer = False
 
 
+def parse_arguments() -> tuple[str, str]:
+    """
+    Print the header and read the input (case folder or Excel assumption book) from the
+    command line. Only called when the script is executed, so that other tools can import
+    this file to reuse the case folder functions. With --xls-to-case, an Excel assumption
+    book is converted into a case folder and the script exits.
+
+    Returns
+    -------
+    input_source : str
+        Case folder or Excel file to be considered.
+
+    input_type : str
+        Either 'case' or 'excel'.
+    """
+    #
+    for header in headers:
+        print(header)
+    #
+    # check provided arguments on the command line
+    parser = argparse.ArgumentParser()
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "--folder",
+        type=str,
+        help="Case folder (YAML + CSV) to read configuration and settings from "
+        f"(default: '{default_case_dir}'); create one from an Excel book with "
+        "'--xls-to-case <book.xlsx> <folder>'.",
+    )
+    input_group.add_argument(
+        "--xls",
+        type=str,
+        help="Excel assumption book to read configuration and settings from "
+        "(legacy input, alternative to --folder).",
+    )
+    input_group.add_argument(
+        "--xls-to-case",
+        nargs=2,
+        metavar=("XLSX", "CASE_DIR"),
+        help="Convert an Excel assumption book into a case folder (case.yaml + CSV) and exit.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --xls-to-case: overwrite an existing case folder.",
+    )
+    args = parser.parse_args()
+    #
+    if args.xls_to_case:
+        xlsx, case_dir = args.xls_to_case
+        if not os.path.isfile(xlsx):
+            print(f'error! provided input file does not exist: "{xlsx}"\n')
+            sys.exit(-1)
+        convert_xlsx_to_case(xlsx, case_dir, args.force)
+        sys.exit(0)
+    #
+    # input_source is either a case folder (input_type 'case') or an Excel
+    # assumption book (input_type 'excel')
+    if args.xls:
+        input_type = "excel"
+        input_source = args.xls
+        #
+        if not os.path.isfile(input_source):
+            print(f'error! provided input file does not exist: "{input_source}"\n')
+            sys.exit(-1)
+    #
+    else:
+        input_type = "case"
+        input_source = args.folder if args.folder else default_case_dir
+        #
+        if not os.path.isfile(os.path.join(input_source, "case.yaml")):
+            print(
+                "error! provided case folder does not exist or has no case.yaml: "
+                f'"{input_source}"\n'
+            )
+            sys.exit(-1)
+    #
+    return input_source, input_type
+
+
 # SUPPORT FUNCTIONS -----------------------------------------------------------
 
 
@@ -260,28 +327,1337 @@ def random_string(string_length=10):
     return random[0:string_length]  # Return the random string.
 
 
-def read_excel_data(
-    excel_file: str,
+# CASE FOLDER INPUT (YAML + CSV) ---------------------------------------------
+#
+# Case-folder (YAML + CSV) input handling for PyPSA-X.
+#
+# A case folder replaces the Excel assumption book (e.g. PyPSA_PtX_AB_default.xlsx):
+#
+#     <case>/
+#     ├── case.yaml            all settings in one file, sections:
+#     │                          settings     optimization settings          (former sheet: opt_params)
+#     │                          assumptions  economic / project assumptions (former sheet: AB, upper block)
+#     │                          scenarios    scenario changes               (former sheet: scen_params)
+#     │                          stochastic   stochastic case changes        (former sheet: stoch_params)
+#     │                          timeseries   profiles -> PyPSA time-varying attributes
+#     ├── technologies.csv     technology parameters          (former sheet: AB, lower block)
+#     ├── network/*.csv        topology + per-asset overrides (former sheets: carriers, buses, generators, ...)
+#     └── timeseries/
+#         └── profiles.csv     raw hourly profiles            (former sheet: raw_data)
+#
+# `build_tables()` turns a case folder into plain PyPSA tables (what the Excel formulas did) and
+#
+
+# ---------------------------------------------------------------------------------------------
+# technology parameter -> component attribute mapping
+#
+# For every component table, the attribute is looked up as (row._component, parameter) in
+# technologies.csv (case-insensitive, like Excel's XLOOKUP). If not found, the default is used.
+# A non-empty cell in network/<table>.csv always wins over the lookup (per-asset override).
+# ---------------------------------------------------------------------------------------------
+
+_UC = [  # unit commitment / ramping attributes: (attribute, default)
+    ("start_up_cost", 0),
+    ("shut_down_cost", 0),
+    ("stand_by_cost", 0),
+    ("min_up_time", 0),
+    ("min_down_time", 0),
+    ("up_time_before", 0),
+    ("down_time_before", 0),
+    ("ramp_limit_up", 1),
+    ("ramp_limit_down", 1),
+    ("ramp_limit_start_up", 0),
+    ("ramp_limit_shut_down", 0),
+]
+
+_COST = {
+    "capital_cost": ("capital_cost", 0),
+    "_capital_cost_if_inst": ("capital_cost_if_inst", 0),
+    "marginal_cost": ("vom", 0),
+    "_bg_marginal_cost": ("bg_vom", 0),
+    "_retirement_gain": ("retirement_gain", 0),
+}
+
+
+def _nom(prefix: str) -> dict:
+    return {
+        f"{prefix}_nom_extendable": ("extendable", "True"),
+        f"{prefix}_nom": ("nom", 0),
+        f"{prefix}_nom_min": ("nom_min", 0),
+        "_nom_min_if_inst": ("nom_min_if_inst", 0),
+        f"{prefix}_nom_max": ("nom_max", 0),
+        f"{prefix}_nom_mod": ("module_size", 0),
+    }
+
+
+PARAM_MAP = {
+    "generators": {
+        **_nom("p"),
+        "committable": ("committable", "False"),
+        "p_min_pu": ("min_pu", 0),
+        "p_max_pu": ("max_pu", 1),
+        "_min_pu_if_in_op": ("min_pu_if_in_op", 0),
+        **_COST,
+        "sign": ("sign", 1),
+        "e_sum_max": ("e_sum_max", "inf"),
+        "e_sum_min": ("e_sum_min", "-inf"),
+        "_max_op_hours": ("max_op_hours", "inf"),
+        **{a: (a, d) for a, d in _UC},
+    },
+    "links": {
+        **_nom("p"),
+        "committable": ("committable", "False"),
+        "p_min_pu": ("min_pu", 0),
+        "p_max_pu": ("max_pu", 1),
+        "_min_pu_if_in_op": ("min_pu_if_in_op", 0),
+        "efficiency": ("efficiency1", 0),
+        "efficiency2": ("efficiency2", 0),
+        "efficiency3": ("efficiency3", 0),
+        "efficiency4": ("efficiency4", 0),
+        "efficiency5": ("efficiency5", 0),
+        **_COST,
+        **{a: (a, d) for a, d in _UC},
+    },
+    "stores": {
+        **_nom("e"),
+        "e_cyclic": ("cyclic_SoC", "True"),
+        "e_min_pu": ("min_pu", 0),
+        "e_max_pu": ("max_pu", 1),
+        **_COST,
+        "standing_loss": ("standing_loss", 0),  # given in %, converted below
+    },
+    "storage_units": {
+        **{k: v for k, v in _nom("p").items() if k != "p_nom_mod"},
+        "cyclic_state_of_charge": ("cyclic_SoC", "True"),
+        "sign": ("sign", 1),
+        **_COST,
+        "max_hours": ("max_hours", 1),
+        "efficiency_store": ("charging_efficiency", 0),
+        "efficiency_dispatch": ("discharging_efficiency", 0),
+        "standing_loss": ("standing_loss", 0),  # given in %, converted below
+    },
+    "lines": {
+        "type": ("type", "TBD"),
+        **_nom("s"),
+        **{
+            k: v
+            for k, v in _COST.items()
+            if k not in ("marginal_cost", "_bg_marginal_cost")
+        },
+    },
+    "transformers": {
+        **_nom("s"),
+        **{
+            k: v
+            for k, v in _COST.items()
+            if k not in ("marginal_cost", "_bg_marginal_cost")
+        },
+        "tap_ratio": ("tap_ratio", 1),
+    },
+}
+
+# attributes given in percent in technologies.csv
+PERCENT_ATTRS = {"standing_loss"}
+# attributes multiplied with the line length
+PER_LENGTH_ATTRS = {"lines": {"capital_cost", "_capital_cost_if_inst"}}
+# bus column used to derive carrier / unit
+BUS_COLUMN = {
+    "generators": "bus",
+    "stores": "bus",
+    "storage_units": "bus",
+    "loads": "bus",
+    "links": "bus0",
+    "lines": "bus0",
+    "transformers": "bus0",
+}
+UNIT_COLUMN = {
+    "generators": "_p_nom_unit",
+    "links": "_p_nom_unit",
+    "storage_units": "_p_nom_unit",
+    "stores": "_e_nom_unit",
+    "lines": "_s_nom_unit",
+    "transformers": "_s_nom_unit",
+}
+COMPONENT_TABLES = [
+    "carriers",
+    "buses",
+    "generators",
+    "links",
+    "stores",
+    "storage_units",
+    "lines",
+    "transformers",
+    "shunt_impedances",
+    "loads",
+]
+# helper columns of the Excel book which carry no model information
+EXCEL_HELPER_COLUMNS = {"_unique", "_no_references"}
+
+# ---------------------------------------------------------------------------------------------
+# case.yaml 'settings' (nested) -> legacy flat setting names used by pypsa-x(2).py
+# ---------------------------------------------------------------------------------------------
+
+CONFIG_KEYS = [
+    # (path in case.yaml 'settings', legacy global name)
+    ("debug.enabled", "debug_mode"),
+    ("debug.hours_to_optimize", "hours_to_optimize"),
+    ("output.target_folder", "target_folder"),
+    ("output.csv_subfolder", "csv_subfolder"),
+    ("output.temp_file", "temp_file"),
+    ("output.result_file", "result_file"),
+    ("compute.use_oetc", "use_oetc"),
+    ("segmentation.enabled", "do_segmentation"),
+    ("segmentation.function", "segmentation_function"),
+    ("segmentation.hours", "segmentation_hours"),
+    ("scenarios.run_all", "run_scenarios"),
+    ("network.modular_representation", "modular_representation"),
+    ("network.transmission_losses", "transmission_losses"),
+    ("network.remove_kvl_constraints", "remove_kvl_constraints"),
+    ("constraints.investment", "do_investment_constraints"),
+    ("constraints.operational", "do_operational_constraints"),
+    ("constraints.milp", "do_milp_constraints"),
+    (
+        "constraints.strict_unsimultaneous_dis_charging",
+        "do_strict_unsimultaneous_dis+charging",
+    ),
+    ("constraints.maintenance.enabled", "do_maintenance_planing"),
+    ("constraints.maintenance.mode", "maintenance_mode"),
+    ("duals.assign_all", "assign_all_duals"),
+    ("small_limit", "small_limit"),
+    ("economics.discount_factor", "discount_factor"),
+    ("economics.years_of_construction", "years_of_construction"),
+    ("economics.project_cod", "project_cod"),
+    ("economics.years_of_operation", "years_of_operation"),
+    ("solver.mipgap", "mipgap"),
+    ("solver.timelimit_hours", "timelimit_in_hours"),
+    ("solver.log_to_console", "log_to_console"),
+    ("solver.output_flag", "output_flag"),
+    ("stochastic.enabled", "run_stochastic_runs"),
+    ("stochastic.alpha", "stoch_alpha"),
+    ("stochastic.omega", "stoch_omega"),
+    ("stochastic.cases", "stoch_case_definition"),
+    ("mga.enabled", "run_mga_runs"),
+    ("mga.slack", "mga_slack"),
+    ("mga.slacks", "mga_slacks"),
+    ("rolling_horizon.enabled", "run_rollinghorizon_after_optimization"),
+    ("rolling_horizon.horizon", "rollinghorizon_horizon"),
+    ("rolling_horizon.overlap", "rollinghorizon_overlap"),
+    ("security_constrained.enabled", "run_security_constrained_optimization"),
+    ("investment.periods", "investment_periods"),
+    ("investment.weighting", "investment_weighting"),
+    ("investment.primary_optimization", "primary_optimization"),
+    ("investment.objective_function", "objective_function"),
+    ("nminus1.enabled", "nminus1_activate"),
+    ("cfe.matching", "cfe_matching"),
+    ("cfe.type", "cfe_type"),
+    ("cfe.renewables", "cfe_rens"),
+    ("reserve_margin.enabled", "rm_activate"),
+    ("reserve_margin.factors.a", "rm_factor_a"),
+    ("reserve_margin.factors.b", "rm_factor_b"),
+    ("reserve_margin.factors.c", "rm_factor_c"),
+    ("reserve_margin.factors.d", "rm_factor_d"),
+    ("reserve_margin.factors.e", "rm_factor_e"),
+    ("reserve_margin.max_generator", "rm_max_generator"),
+    ("reserve_margin.load.class", "rm_load_class"),
+    ("reserve_margin.load.name", "rm_load_name"),
+]
+# legacy settings that stay real Python lists (all other lists/dicts are passed as strings,
+# because pypsa-x.py eval()s them)
+NATIVE_LIST_KEYS = {"cfe_rens"}
+
+
+def _legacy(value, key: str):
+    """Convert a native YAML value to the representation the legacy code expects."""
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, (list, dict)) and key not in NATIVE_LIST_KEYS:
+        return repr(value)
+    return value
+
+
+def _get_path(d: dict, path: str):
+    for part in path.split("."):
+        if not isinstance(d, dict) or part not in d:
+            return None
+        d = d[part]
+    return d
+
+
+def _read_yaml(path: str) -> dict:
+    if not os.path.isfile(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+CASE_FILE = "case.yaml"
+CASE_SECTIONS = ("settings", "assumptions", "scenarios", "stochastic", "timeseries")
+
+
+SCHEMA_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "case.schema.json"
+)
+_validated = {}  # path -> mtime of the last successful validation
+
+
+def validate_case(case_dir: str) -> dict:
+    """
+    Load <case_dir>/case.yaml and validate it against case.schema.json.
+    Raises ValueError listing every problem (with its location in the file).
+    """
+    path = os.path.join(case_dir, CASE_FILE)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"missing {path}")
+    data = _read_yaml(path)
+    mtime = os.path.getmtime(path)
+    if _validated.get(path) == mtime:
+        return data
+    with open(SCHEMA_FILE, encoding="utf-8") as f:
+        schema = json.load(f)
+    validator = jsonschema.Draft202012Validator(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.absolute_path))
+    if errors:
+        lines = [f"{path} is not valid ({len(errors)} problem(s)):"]
+        for e in errors:
+            where = ".".join(str(p) for p in e.absolute_path) or "<top level>"
+            lines.append(f"  - {where}: {e.message}")
+        raise ValueError("\n".join(lines))
+    _validated[path] = mtime
+    return data
+
+
+def read_case_section(case_dir: str, section: str) -> dict:
+    """Return one top-level section of the validated <case_dir>/case.yaml (empty dict if missing)."""
+    if section not in CASE_SECTIONS:
+        raise KeyError(f"unknown case.yaml section '{section}'")
+    return validate_case(case_dir).get(section) or {}
+
+
+def _to_number(value):
+    """Convert strings that hold numbers into numbers; leave everything else unchanged."""
+    if isinstance(value, str):
+        s = value.strip()
+        if s == "":
+            return value
+        try:
+            f = float(s)
+        except ValueError:
+            return value
+        if s.lower() in ("inf", "-inf", "+inf", "nan"):
+            return value  # keep text, PyPSA parses it
+        return int(f) if f.is_integer() and "." not in s and "e" not in s.lower() else f
+    return value
+
+
+def _equal(a, b, rtol: float = 1e-9) -> bool:
+    """Value equality used to detect overrides (string/bool/number tolerant)."""
+    a, b = _to_number(a), _to_number(b)
+    a_nan = a is None or (isinstance(a, float) and np.isnan(a)) or a == ""
+    b_nan = b is None or (isinstance(b, float) and np.isnan(b)) or b == ""
+    if a_nan or b_nan:
+        return a_nan and b_nan
+    if isinstance(a, (bool, np.bool_)) or isinstance(b, (bool, np.bool_)):
+        return str(a).lower() == str(b).lower()
+    if isinstance(a, (int, float, np.number)) and isinstance(
+        b, (int, float, np.number)
+    ):
+        return bool(np.isclose(float(a), float(b), rtol=rtol, atol=1e-12))
+    return str(a).strip().lower() == str(b).strip().lower()
+
+
+# ---------------------------------------------------------------------------------------------
+# assumptions
+# ---------------------------------------------------------------------------------------------
+
+
+def derive_assumptions(raw: dict) -> dict:
+    """Add all values the AB sheet calculated with formulas (WACC, annuity, targets, ...)."""
+    a = dict(raw)
+    a["equity_share"] = 1 - a["debt_share"]
+    a["wacc_nominal_before_tax"] = (
+        a["interest_nominal"] * a["debt_share"]
+        + a["equity_share"] * a["cost_of_equity_nominal"]
+    )
+    a["wacc_nominal"] = (
+        a["interest_nominal"] * a["debt_share"] * (1 - a["corporate_tax"])
+        + a["equity_share"] * a["cost_of_equity_nominal"]
+    )
+    a["wacc_real"] = (1 + a["wacc_nominal"]) / (1 + a["inflation"]) - 1
+    a["annuity_factor"] = (
+        a["wacc_real"] if a["financial_term"] == "real" else a["wacc_nominal"]
+    )
+    a["wacc_to_use"] = a["annuity_factor"]
+    a["y_end"] = a["y_cod"] + a["project_lifetime"]
+    a["construction_period"] = a["y_cod"] - a["y_ntp"]
+    adjust = str(a.get("plant_availability_adjustment", True)).lower() != "false"
+    availability = a["plant_availability"] if adjust else 1
+    a["production_target_hour"] = a["production_target_year"] / 8760 / availability
+    a["production_hourly_adjusted"] = a["production_target_hour"]
+    a["CUR"] = a["currency"]
+    return a
+
+
+# ---------------------------------------------------------------------------------------------
+# technologies
+# ---------------------------------------------------------------------------------------------
+
+
+def read_technologies(path: str, assumptions: dict) -> pd.DataFrame:
+    """
+    Read technologies.csv (long format) and resolve `capital_cost = auto`:
+        capital_cost = invest_cost * annuity_factor + fom * invest_cost
+    """
+    df = pd.read_csv(path, dtype=str, keep_default_na=False).astype(object)
+    df["value"] = df["value"].map(_to_number)
+    df["_key"] = df["component"].str.lower() + "|" + df["parameter"].str.lower()
+    #
+    lookup = dict(zip(df["_key"], df["value"]))
+    for i, row in df.iterrows():
+        if (
+            str(row["parameter"]).lower() == "capital_cost"
+            and str(row["value"]).lower() == "auto"
+        ):
+            comp = row["component"].lower()
+            invest = _to_number(lookup.get(f"{comp}|invest_cost", 0)) or 0
+            fom = _to_number(lookup.get(f"{comp}|fom", 0)) or 0
+            df.at[i, "value"] = invest * assumptions["annuity_factor"] + fom * invest
+    return df
+
+
+def _tech_lookup(tech: pd.DataFrame):
+    values = dict(zip(tech["_key"], tech["value"]))
+    units = dict(zip(tech["_key"], tech["unit"]))
+
+    def get(component, parameter, default, what="value"):
+        key = f"{str(component).lower()}|{parameter.lower()}"
+        src = values if what == "value" else units
+        return src[key] if key in src else default
+
+    return get
+
+
+# ---------------------------------------------------------------------------------------------
+# network tables
+# ---------------------------------------------------------------------------------------------
+
+
+def read_network_table(path: str) -> pd.DataFrame:
+    """Read a network/*.csv file. Empty cells stay empty strings (= not set)."""
+    df = pd.read_csv(path, dtype=str, keep_default_na=False).astype(object)
+    return df.apply(lambda col: col.map(_to_number)).astype(object)
+
+
+def resolve_table(
+    table: str,
+    df: pd.DataFrame,
+    tech: pd.DataFrame,
+    a: dict,
+    buses: pd.DataFrame,
+    carriers: pd.DataFrame,
+) -> pd.DataFrame:
+    """Fill a topology table with values from technologies.csv and assumptions."""
+    df = df.astype(object)
+    get = _tech_lookup(tech)
+    bus_carrier = dict(zip(buses["name"], buses["carrier"]))
+    carrier_unit = dict(zip(carriers["carrier"], carriers["_unit"]))
+    bus_unit = {b: carrier_unit.get(c, "") for b, c in bus_carrier.items()}
+
+    def fill(col, values):
+        if col not in df.columns:
+            df[col] = pd.Series("", index=df.index, dtype=object)
+        mask = df[col].map(lambda v: v == "" or v is None)
+        df.loc[mask, col] = pd.Series(values, index=df.index)[mask]
+
+    if table in PARAM_MAP:
+        comp = (
+            df["_component"]
+            if "_component" in df.columns
+            else pd.Series("", index=df.index)
+        )
+        for attr, (param, default) in PARAM_MAP[table].items():
+            vals = [get(c, param, default) for c in comp]
+            if attr in PERCENT_ATTRS:
+                vals = [v / 100 if isinstance(v, (int, float)) else v for v in vals]
+            if attr in PER_LENGTH_ATTRS.get(table, set()):
+                vals = [
+                    v * _to_number(length) if isinstance(v, (int, float)) else v
+                    for v, length in zip(
+                        vals, df.get("length", pd.Series(1, index=df.index))
+                    )
+                ]
+            fill(attr, vals)
+        if "_capital_cost_if_inst" in PARAM_MAP[table]:
+            fill(
+                "_capital_cost_unit",
+                [get(c, "capital_cost", "", what="unit") for c in comp],
+            )
+        fill("build_year", [a["y_cod"]] * len(df))
+        fill("lifetime", [a["project_lifetime"]] * len(df))
+
+    if table in BUS_COLUMN:
+        bus = df[BUS_COLUMN[table]]
+        fill("carrier", [bus_carrier.get(b, "") for b in bus])
+        if table in UNIT_COLUMN:
+            fill(UNIT_COLUMN[table], [bus_unit.get(b, "") for b in bus])
+
+    if table == "buses":
+        fill("unit", [carrier_unit.get(c, "") for c in df["carrier"]])
+
+    if table == "loads":
+        units = [bus_unit.get(b, "") for b in df["bus"]]
+        fill("total_output_unit", units)
+        fill("p_set_unit", units)
+        product = str(a["production_product"]).lower()
+        active = [str(c).lower() == product for c in df["carrier"]]
+        fill("active", ["True" if x else "False" for x in active])
+        fill("p_set", [a["production_target_hour"] if x else 0 for x in active])
+        fill(
+            "_supply_mode",
+            [a["production_supply_frequency"] if x else "-" for x in active],
+        )
+
+    return df
+
+
+# ---------------------------------------------------------------------------------------------
+# time series
+# ---------------------------------------------------------------------------------------------
+
+
+def supply_mode_profile(
+    index: pd.DatetimeIndex, frequency: str, seed: int = 42
+) -> pd.Series:
+    """Python version of the raw_data 'Supply_Mode' column formula."""
+    s = pd.Series(0.0, index=index)
+    last_hour = index.hour == 23
+    end_of_month = (index.day == index.days_in_month) & last_hour
+    frequency = str(frequency).lower()
+    if frequency == "constant":
+        s[:] = 1.0
+    elif frequency == "monthly":
+        s[end_of_month] = index[end_of_month].days_in_month * 24
+    elif frequency == "quarterly":
+        s[end_of_month & index.month.isin([3, 6, 9, 12])] = 2190
+    elif frequency == "half-annual":
+        s[end_of_month & index.month.isin([6, 12])] = 4380
+    elif frequency == "annual":
+        s[end_of_month & (index.month == 12)] = 8760
+    elif frequency == "weekly":
+        end_of_week = last_hour & (index.weekday == 4)  # Friday 23:00
+        s[end_of_week] = 8760 / max(int(end_of_week.sum()), 1)
+    elif frequency == "random":
+        rng = np.random.default_rng(seed)
+        s[:] = rng.integers(75, 126, len(index)) / 100
+    else:
+        raise ValueError(f"unknown production_supply_frequency '{frequency}'")
+    return s
+
+
+def build_timeseries(case_dir: str, a: dict) -> tuple[pd.DataFrame, dict]:
+    """Return (snapshots DataFrame, {'<table>-<attr>': DataFrame})."""
+    ts_dir = os.path.join(case_dir, "timeseries")
+    spec = read_case_section(case_dir, "timeseries")
+    profiles = pd.read_csv(
+        os.path.join(ts_dir, "profiles.csv"), index_col=0, parse_dates=True
+    )
+    profiles.index.name = "snapshot"
+    if "Supply_Mode" not in profiles.columns:
+        profiles["Supply_Mode"] = supply_mode_profile(
+            profiles.index,
+            a["production_supply_frequency"],
+            spec.get("random_seed", 42),
+        )
+    #
+    snapshots = pd.DataFrame(index=profiles.index)
+    for col, val in (spec.get("snapshot_weightings") or {}).items():
+        snapshots[col] = val
+    #
+    series = {}
+    for sheet, columns in (spec.get("series") or {}).items():
+        df = pd.DataFrame(index=profiles.index)
+        for name, rule in columns.items():
+            scale = rule.get("scale", 1)
+            if isinstance(scale, str):
+                scale = a[scale]
+            if "profile" in rule:
+                df[name] = profiles[rule["profile"]] * scale
+            elif "constant" in rule:
+                df[name] = float(rule["constant"]) * scale
+            else:
+                raise ValueError(f"{sheet}.{name}: need 'profile' or 'constant'")
+        series[sheet] = df
+    return snapshots, series
+
+
+# ---------------------------------------------------------------------------------------------
+# case -> PyPSA tables
+# ---------------------------------------------------------------------------------------------
+
+
+def build_tables(case_dir: str) -> dict:
+    """Build all PyPSA tables (static + time series) from a case folder."""
+    a = derive_assumptions(read_case_section(case_dir, "assumptions"))
+    tech = read_technologies(os.path.join(case_dir, "technologies.csv"), a)
+    net_dir = os.path.join(case_dir, "network")
+    raw = {}
+    for table in COMPONENT_TABLES:
+        path = os.path.join(net_dir, f"{table}.csv")
+        if os.path.isfile(path):
+            raw[table] = read_network_table(path)
+    carriers = raw.get("carriers", pd.DataFrame(columns=["carrier", "_unit"]))
+    buses = resolve_table("buses", raw["buses"], tech, a, raw["buses"], carriers)
+    tables = {"carriers": carriers, "buses": buses}
+    for table, df in raw.items():
+        if table not in tables:
+            tables[table] = resolve_table(table, df, tech, a, buses, carriers)
+    #
+    tables["network"] = pd.DataFrame(
+        [
+            {
+                "name": a["project_name"],
+                "remark": " PtX / µgrid Optimizer",
+                "pypsa_version": "1.0.0",
+                "_annuity_basis": a["financial_term"],
+                "_wacc": a["wacc_to_use"],
+                "_annuity": a["annuity_factor"],
+                "_currency": a["currency"],
+                "_base_year": a["y_base"],
+                "_ntp_year": a["y_ntp"],
+                "_cod_year": a["y_cod"],
+                "_plant_availability": a["plant_availability"],
+                "_project_location": a["project_location"],
+                "_project_country": a["project_country"],
+            }
+        ]
+    )
+    snapshots, series = build_timeseries(case_dir, a)
+    return {
+        "tables": tables,
+        "snapshots": snapshots,
+        "series": series,
+        "assumptions": a,
+    }
+
+
+def write_pypsa_csv_folder(built: dict, folder: str) -> None:
+    """Write built tables in the CSV layout that pypsa.Network(folder) imports."""
+    os.makedirs(folder, exist_ok=True)
+    for f in os.listdir(folder):
+        if f.endswith(".csv"):
+            os.remove(os.path.join(folder, f))
+    for table, df in built["tables"].items():
+        df = df.replace("", np.nan)
+        if table == "carriers":
+            df = df.rename(columns={"carrier": "name"})
+        df.to_csv(os.path.join(folder, f"{table}.csv"), index=False)
+    # PyPSA parses dates only from a 'snapshot' column (not from the index)
+    built["snapshots"].reset_index().to_csv(os.path.join(folder, "snapshots.csv"))
+    for sheet, df in built["series"].items():
+        df.to_csv(os.path.join(folder, f"{sheet}.csv"))
+
+
+def case_mtime(case_dir: str) -> float:
+    """Newest modification time of all files in the case folder."""
+    newest = os.path.getmtime(case_dir)
+    for root, _, files in os.walk(case_dir):
+        for f in files:
+            newest = max(newest, os.path.getmtime(os.path.join(root, f)))
+    return newest
+
+
+# ---------------------------------------------------------------------------------------------
+# config + scenarios -> legacy DataFrames / settings
+# ---------------------------------------------------------------------------------------------
+
+
+def read_config(case_dir: str, a: dict, n_snapshots: int, link_ports: int) -> dict:
+    """Return the flat legacy settings (only keys present in case.yaml:settings or derivable)."""
+    cfg = read_case_section(case_dir, "settings")
+    flat = {}
+    for path, key in CONFIG_KEYS:
+        value = _get_path(cfg, path)
+        if value is not None:
+            flat[key] = _legacy(value, key)
+    # values the Excel book calculated from the assumptions
+    derived = {
+        "discount_factor": a["annuity_factor"],
+        "years_of_construction": a["construction_period"],
+        "project_cod": a["y_cod"],
+        "years_of_operation": a["project_lifetime"],
+        "investment_periods": repr([a["y_cod"]]),
+        "total_snapshot": n_snapshots,
+        "link_ports": link_ports,
+    }
+    for key, value in derived.items():
+        flat.setdefault(key, value)
+    if "timelimit_in_hours" in flat:
+        flat["timelimit"] = 3600 * flat["timelimit_in_hours"]
+    return flat
+
+
+NONE = (
+    np.nan
+)  # placeholder for 'not applicable' (the Excel book used 'None', read as NaN)
+
+
+def _flatten_changes(block: dict) -> list:
+    """
+    Flatten {scenario: {active, set, del, inactive: {set, del}}} into legacy rows.
+    'inactive' holds changes that are kept for reference but switched off.
+    """
+    rows = []
+    for scenario, spec in (block or {}).items():
+        rows += _flatten_spec(
+            scenario, spec, "True" if spec.get("active", True) else "False"
+        )
+        if spec.get("inactive"):
+            rows += _flatten_spec(scenario, spec["inactive"], "False")
+    return rows
+
+
+def _flatten_spec(scenario: str, spec: dict, active: str) -> list:
+    rows = []
+    if True:
+        for cls, items in (spec.get("set") or {}).items():
+            if cls == "Python":
+                for column, value in items.items():
+                    rows.append(
+                        [
+                            scenario,
+                            "set",
+                            "Python",
+                            NONE,
+                            column,
+                            _legacy(value, column),
+                            active,
+                        ]
+                    )
+            else:
+                for name, attrs in items.items():
+                    for column, value in attrs.items():
+                        rows.append([scenario, "set", cls, name, column, value, active])
+        for cls, names in (spec.get("del") or {}).items():
+            # list of names, or {name: {column: value}} (stochastic deletes zero a column)
+            if isinstance(names, dict):
+                for name, attrs in names.items():
+                    for column, value in (attrs or {NONE: NONE}).items():
+                        rows.append([scenario, "del", cls, name, column, value, active])
+            else:
+                for name in names:
+                    rows.append([scenario, "del", cls, name, NONE, NONE, active])
+    return rows
+
+
+SCEN_COLUMNS = [
+    "scenario",
+    "action",
+    "class",
+    "technology_name",
+    "column",
+    "value",
+    "active",
+]
+
+
+def read_scenarios(case_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return scen_params and stoch_params DataFrames in the legacy (Excel) layout."""
+    scen = pd.DataFrame(
+        _flatten_changes(read_case_section(case_dir, "scenarios")), columns=SCEN_COLUMNS
+    )
+    stoch = pd.DataFrame(
+        _flatten_changes(read_case_section(case_dir, "stochastic")),
+        columns=SCEN_COLUMNS,
+    )
+    return scen, stoch
+
+
+# EXCEL ASSUMPTION BOOK -> CASE FOLDER CONVERTER ---------------------------
+#
+# python pypsa-x.py --xls-to-case PyPSA_PtX_AB_default.xlsx cases/default [--force]
+
+# opt_params names in the workbook that differ from the names used in the code
+OPT_PARAM_RENAMES = {
+    "maintenance_start": "maintenance_mode",
+    "do_capacity_constraints": "do_investment_constraints",
+    "do_strict_unsimultanious_dis+charging": "do_strict_unsimultaneous_dis+charging",
+}
+# derived economic values (calculated by derive_assumptions() in this file)
+DERIVED_ASSUMPTIONS = {
+    "equity_share",
+    "wacc_nominal",
+    "wacc_real",
+    "annuity_factor",
+    "y_end",
+    "construction_period",
+    "production_hourly_adjusted",
+}
+CAPEX_PATTERN = re.compile(
+    r'^=SUMIFS\(Technical_assumption\[value\],.*"invest_cost"\)\*annuity_factor'
+    r'\+SUMIFS\(Technical_assumption\[value\],.*"fom"\)\*SUMIFS\(Technical_assumption\[value\],.*"invest_cost"\)$'
+)
+
+
+# ---------------------------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------------------------
+
+
+def _clean(v):
+    """Excel cell value -> plain python value for YAML/CSV."""
+    if isinstance(v, str):
+        s = v.strip()
+        if s in ("True", "False"):
+            return s == "True"
+        return _to_number(s)
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.floating, float)):
+        f = float(v)
+        return int(f) if f.is_integer() and abs(f) < 1e15 else f
+    if isinstance(v, _dt.datetime):
+        return v.date().isoformat()
+    return v
+
+
+def _yaml_scalar(v) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return "null"
+    if isinstance(v, float):
+        r = repr(v)
+        if (
+            "e" in r and "." not in r.split("e")[0]
+        ):  # YAML 1.1 needs '1.0e-05', not '1e-05'
+            r = r.replace("e", ".0e", 1)
+        return r
+    if isinstance(v, int):
+        return repr(v)
+    if isinstance(v, (list, dict)):
+        return yaml.safe_dump(v, default_flow_style=True, sort_keys=False).strip()
+    s = str(v)
+    if (
+        s == ""
+        or re.search(r"[:#\[\]{},&*!|>'\"%@`]|^\s|\s$", s)
+        or s.lower() in ("true", "false", "yes", "no", "null", "on", "off", "~")
+        or re.fullmatch(r"[-+0-9.eE]+", s)
+    ):
+        return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return s
+
+
+def _emit(d: dict, comments: dict, indent: int = 0, prefix: str = "") -> list:
+    lines = []
+    for k, v in d.items():
+        path = f"{prefix}{k}"
+        pad = "  " * indent
+        if isinstance(v, dict) and v and not path.endswith("stochastic.cases"):
+            lines.append(f"{pad}{k}:")
+            lines.extend(_emit(v, comments, indent + 1, path + "."))
+        else:
+            c = comments.get(path)
+            line = f"{pad}{k}: {_yaml_scalar(v)}"
+            lines.append(f"{line:<60} # {c}" if c else line)
+    return lines
+
+
+def _set_path(d: dict, path: str, value):
+    parts = path.split(".")
+    for p in parts[:-1]:
+        d = d.setdefault(p, {})
+    d[parts[-1]] = value
+
+
+def _block_rows(ws, ws_f, first_row: int, stop_label: str = None):
+    """Yield (row, B..G cached values, E formula) of an AB block until stop_label."""
+    for r in range(first_row, ws.max_row + 1):
+        label = ws.cell(r, 2).value
+        if stop_label and label == stop_label:
+            return
+        if label is None:
+            continue
+        yield r, [ws.cell(r, c).value for c in range(2, 8)], ws_f.cell(r, 5).value
+
+
+# ---------------------------------------------------------------------------------------------
+# converters
+# ---------------------------------------------------------------------------------------------
+
+
+def convert_ab(wb, wb_f, out: str) -> dict:
+    ws, ws_f = wb["AB"], wb_f["AB"]
+    labels = {ws.cell(r, 2).value: r for r in range(1, ws.max_row + 1)}
+    econ_start = labels["Economic Assumption"] + 2
+    tech_start = labels["Technical Assumption"] + 2
+    #
+    # --- assumptions.yaml
+    lines = [
+        "# Economic and project assumptions (former sheet 'AB', block 'Economic Assumption').",
+        "# Derived values (equity share, WACC, annuity factor, end year, construction period,",
+        "# hourly production target) are calculated by derive_assumptions() in pypsa-x.py.",
+        "",
+    ]
+    raw = {}
+    for r, (comp, _date, param, value, unit, comment), _ in _block_rows(
+        ws, ws_f, econ_start, "Technical Assumption"
+    ):
+        if not param or param in DERIVED_ASSUMPTIONS:
+            continue
+        value = _clean(value)
+        raw[param] = value
+        note = " | ".join(
+            str(x) for x in (comp, unit, comment) if x not in (None, "-", "")
+        )
+        line = f"{param}: {_yaml_scalar(value)}"
+        lines.append(f"{line:<45} # {note}" if note else line)
+    with open(os.path.join(out, "assumptions.yaml"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    a = derive_assumptions(raw)
+    #
+    # --- technologies.csv
+    rows = []
+    for r, (comp, date, param, value, unit, comment), formula in _block_rows(
+        ws, ws_f, tech_start
+    ):
+        if param is None:
+            continue
+        formula = formula.text if hasattr(formula, "text") else formula
+        rows.append(
+            {
+                "component": comp,
+                "parameter": param,
+                "value": _clean(value),
+                "unit": "" if unit is None else unit,
+                "last_update": _clean(date) if date else "",
+                "comment": "" if comment in (None, "-") else comment,
+                "excel_formula": formula
+                if isinstance(formula, str) and formula.startswith("=")
+                else "",
+            }
+        )
+    tech = pd.DataFrame(rows)
+    # capital_cost: use 'auto' where the standard annuity formula was used
+    lut = {
+        (c.lower(), p.lower()): v
+        for c, p, v in zip(tech.component, tech.parameter, tech.value)
+    }
+    n_auto = 0
+    for i, row in tech.iterrows():
+        if row.parameter == "capital_cost" and CAPEX_PATTERN.match(
+            str(row.excel_formula)
+        ):
+            invest = lut.get((row.component.lower(), "invest_cost"), 0) or 0
+            fom = lut.get((row.component.lower(), "fom"), 0) or 0
+            if _equal(
+                invest * a["annuity_factor"] + fom * invest, row.value, rtol=1e-6
+            ):
+                tech.at[i, "value"] = "auto"
+                tech.at[i, "excel_formula"] = ""
+                n_auto += 1
+    tech.to_csv(os.path.join(out, "technologies.csv"), index=False)
+    print(
+        f"x) technologies.csv: {len(tech)} rows ({n_auto} capital_cost rows set to 'auto')"
+    )
+    return a
+
+
+def convert_config(wb, out: str, a: dict, n_snapshots: int, link_ports: int) -> dict:
+    ws = wb["opt_params"]
+    path_of = {key: path for path, key in CONFIG_KEYS}
+    cfg, comments, seen, skipped = {}, {}, set(), []
+    for r in range(4, ws.max_row + 1):
+        name, value, comment = (ws.cell(r, c).value for c in (2, 3, 4))
+        if name is None or value == "N/A":
+            continue
+        name = OPT_PARAM_RENAMES.get(name, name)
+        if name in seen:
+            skipped.append(f"{name} (duplicate in row {r}, first one wins)")
+            continue
+        seen.add(name)
+        if name == "timelimit" or name not in path_of:
+            if name != "timelimit":
+                skipped.append(f"{name} (not used by the code)")
+            continue
+        value = _clean(value)
+        if isinstance(value, str) and value[:1] in "[{":
+            value = ast.literal_eval(value)
+        # values the book derived from the assumptions are left out (derived at run time)
+        derived = {
+            "discount_factor": a["annuity_factor"],
+            "years_of_construction": a["construction_period"],
+            "project_cod": a["y_cod"],
+            "years_of_operation": a["project_lifetime"],
+            "investment_periods": [a["y_cod"]],
+            "total_snapshot": n_snapshots,
+            "link_ports": link_ports,
+        }
+        if name in derived and (value == derived[name] or _equal(value, derived[name])):
+            continue
+        _set_path(cfg, path_of[name], value)
+        if comment and comment != "-":
+            comments[path_of[name]] = str(comment).replace("\n", " ")
+    header = [
+        "# Optimization settings (former sheet 'opt_params').",
+        "# Left out = default of pypsa-x.py. Derived when left out: economics.*,",
+        "# investment.periods (= [y_cod]), solver timelimit (= 3600 * timelimit_hours).",
+        "",
+    ]
+    with open(os.path.join(out, "config.yaml"), "w", encoding="utf-8") as f:
+        f.write("\n".join(header + _emit(cfg, comments)) + "\n")
+    for s in skipped:
+        print(f"   info! opt_params: skipped {s}")
+    return cfg
+
+
+def convert_scenarios(wb, out: str) -> None:
+    def block(sheet):
+        ws = wb[sheet]
+        result, flags, rows_by_flag = {}, {}, {}
+        for r in range(4, ws.max_row + 1):
+            scen, action, cls, name, column, value, active = (
+                ws.cell(r, c).value for c in range(2, 9)
+            )
+            if scen is None:
+                continue
+            flags.setdefault(str(scen), set()).add(str(active))
+            spec = result.setdefault(str(scen), {})
+            rows_by_flag.setdefault(str(scen), []).append(str(active))
+            if str(active) != "True":
+                spec = spec.setdefault("inactive", {})
+            if action == "set":
+                if cls == "Python":
+                    spec.setdefault("set", {}).setdefault("Python", {})[column] = (
+                        _clean(value)
+                    )
+                else:
+                    spec.setdefault("set", {}).setdefault(cls, {}).setdefault(name, {})[
+                        column
+                    ] = _clean(value)
+            elif action == "del":
+                if column in (None, "None"):  # value is not used for a plain delete
+                    spec.setdefault("del", {}).setdefault(cls, {})[name] = None
+                else:
+                    spec.setdefault("del", {}).setdefault(cls, {}).setdefault(name, {})[
+                        column
+                    ] = _clean(value)
+
+        def tidy(spec):
+            for cls, names in list((spec.get("del") or {}).items()):
+                if all(v is None for v in names.values()):
+                    spec["del"][cls] = list(names)
+                else:
+                    spec["del"][cls] = {k: (v or {}) for k, v in names.items()}
+            if "inactive" in spec:
+                tidy(spec["inactive"])
+
+        for spec in result.values():
+            tidy(spec)
+        for scen, f in flags.items():
+            if "True" not in f:  # whole scenario switched off
+                inactive = result[scen].pop("inactive", {})
+                result[scen] = {"active": False, **inactive}
+            elif len(f) > 1:
+                print(
+                    f"   info! {sheet}: scenario '{scen}' has inactive rows -> kept under 'inactive:'"
+                )
+        return result
+
+    data = {"scenarios": block("scen_params"), "stochastic": block("stoch_params")}
+    header = (
+        "# Scenario definitions (former sheets 'scen_params' and 'stoch_params').\n"
+        "# Per scenario:  set: {<Class>: {<name>: {<attribute>: <value>}}}  |  set: {Python: {<setting>: <value>}}\n"
+        "#                del: {<Class>: [<name>, ...]}  |  active: false\n"
+        "#                inactive: {set: ..., del: ...}   (switched-off changes, kept for reference)\n\n"
+    )
+    with open(os.path.join(out, "scenarios.yaml"), "w", encoding="utf-8") as f:
+        f.write(header + yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+
+
+def convert_network(xlsx: str, out: str, a: dict) -> tuple[dict, list]:
+    sheets = pd.read_excel(xlsx, sheet_name=None)
+    tech = read_technologies(os.path.join(out, "technologies.csv"), a)
+    net_dir = os.path.join(out, "network")
+    os.makedirs(net_dir, exist_ok=True)
+    overrides = []
+
+    #
+    def prep(df):
+        df = df.drop(
+            columns=[
+                c
+                for c in df.columns
+                if c in EXCEL_HELPER_COLUMNS or str(c).startswith("Unnamed")
+            ]
+        )
+        df = df.dropna(how="all")
+        return (
+            df.astype(object)
+            .apply(lambda col: col.map(lambda v: "" if pd.isna(v) else _clean(v)))
+            .astype(object)
+        )
+
+    #
+    carriers = prep(sheets["carriers"])
+    carriers.to_csv(os.path.join(net_dir, "carriers.csv"), index=False)
+    buses_excel = prep(sheets["buses"])
+    #
+    result = {}
+    for table in COMPONENT_TABLES:
+        if table == "carriers" or table not in sheets:
+            continue
+        excel = buses_excel if table == "buses" else prep(sheets[table])
+        derivable = set(PARAM_MAP.get(table, {}))
+        if table in PARAM_MAP:
+            derivable |= {"build_year", "lifetime"}
+            if "_capital_cost_if_inst" in PARAM_MAP[table]:
+                derivable.add("_capital_cost_unit")
+        if table in BUS_COLUMN:
+            derivable.add("carrier")
+        if table in UNIT_COLUMN:
+            derivable.add(UNIT_COLUMN[table])
+        if table == "buses":
+            derivable.add("unit")
+        if table == "loads":
+            derivable |= {
+                "total_output_unit",
+                "p_set_unit",
+                "active",
+                "p_set",
+                "_supply_mode",
+            }
+        derivable &= set(excel.columns)
+        #
+        blank = excel.copy().astype(object)
+        for col in derivable:
+            blank[col] = ""
+        resolved = resolve_table(table, blank, tech, a, buses_excel, carriers)
+        topo = excel.copy().astype(object)
+        for col in derivable:
+            for i in excel.index:
+                if _equal(excel.at[i, col], resolved.at[i, col], rtol=1e-6):
+                    topo.at[i, col] = ""
+                else:
+                    overrides.append(
+                        f"{table}.{excel.at[i, excel.columns[0]]}.{col}: excel={excel.at[i, col]!r} derived={resolved.at[i, col]!r}"
+                    )
+        # drop columns that are completely empty and fully derivable
+        empty = [c for c in derivable if (topo[c] == "").all()]
+        topo = topo.drop(columns=empty)
+        topo.to_csv(os.path.join(net_dir, f"{table}.csv"), index=False)
+        result[table] = excel
+    return result, overrides
+
+
+def convert_timeseries(xlsx: str, out: str, a: dict, statics: dict) -> int:
+    ts_dir = os.path.join(out, "timeseries")
+    os.makedirs(ts_dir, exist_ok=True)
+    raw = pd.read_excel(xlsx, sheet_name="raw_data", header=6)
+    raw = raw.dropna(subset=["Date"]).set_index("Date")
+    raw.index.name = "snapshot"
+    helper = {"Month", "End Of Month", "End of Week", "Year"}
+    profiles = raw[
+        [c for c in raw.columns if c not in helper and not str(c).startswith("Unnamed")]
+    ]
+    profiles = profiles.astype(float)
+    #
+    sheets = pd.read_excel(xlsx, sheet_name=None, index_col=0)
+    spec = {"series": {}}
+    extra = {}
+    named_scales = {
+        k: a[k]
+        for k in ("production_target_hour", "production_target_year", "CO2_ETS")
+        if k in a
+    }
+    for sheet, df in sheets.items():
+        if (
+            "-" not in sheet
+            or sheet.startswith("Z_")
+            or sheet.split("-")[0] not in COMPONENT_TABLES
+        ):
+            continue
+        df = df.dropna(how="all")
+        if df.empty or df.shape[1] == 0:
+            continue
+        table, attr = sheet.split("-", 1)
+        rules = {}
+        for col in df.columns:
+            s = df[col].astype(float).values
+            # constant?
+            if np.allclose(s, s[0]):
+                st = statics.get(table)
+                if st is not None and attr in st.columns:
+                    sv = st.set_index(st.columns[0]).get(attr, {}).get(col)
+                    if sv is not None and _equal(sv, s[0], rtol=1e-9):
+                        print(
+                            f"   info! {sheet}.{col}: constant = static value {s[0]} -> no time series needed"
+                        )
+                        continue
+                rules[col] = {"constant": float(s[0])}
+                continue
+            # scaled profile?
+            for p in profiles.columns:
+                ps = profiles[p].values
+                nz = np.abs(ps) > 1e-12
+                if not nz.any() or not np.allclose(s[~nz], 0):
+                    continue
+                k = float(np.median(s[nz] / ps[nz]))
+                if np.allclose(s, ps * k, rtol=1e-9, atol=1e-12):
+                    rule = {"profile": p}
+                    named = [
+                        n
+                        for n, v in named_scales.items()
+                        if np.isclose(k, v, rtol=1e-9)
+                    ]
+                    if named:
+                        rule["scale"] = named[0]
+                    elif not np.isclose(k, 1):
+                        rule["scale"] = round(k, 12)
+                    rules[col] = rule
+                    break
+            else:
+                name = f"{sheet}:{col}"
+                extra[name] = df[col].astype(float).values
+                rules[col] = {"profile": name}
+        if rules:
+            spec["series"][sheet] = rules
+    for name, values in extra.items():
+        profiles[name] = values
+    #
+    weights = pd.read_excel(xlsx, sheet_name="snapshots", index_col=0)
+    w = {
+        c: float(weights[c].iloc[0])
+        for c in weights.columns
+        if c in ("objective", "stores", "generators")
+    }
+    if w:
+        spec = {"snapshot_weightings": w, **spec}
+    #
+    profiles.to_csv(os.path.join(ts_dir, "profiles.csv"))
+    header = (
+        "# Mapping of raw profiles (profiles.csv) to PyPSA time-varying attributes.\n"
+        "#   <table>-<attribute>: {<name>: {profile: <column>, scale: <number|assumption name>}}\n"
+        "#                        {<name>: {constant: <number>}}\n"
+        "# If profiles.csv has no 'Supply_Mode' column, it is generated from\n"
+        "# production_supply_frequency (section 'assumptions'), using random_seed for 'random'.\n\n"
+    )
+    with open(os.path.join(ts_dir, "timeseries.yaml"), "w", encoding="utf-8") as f:
+        f.write(header + yaml.safe_dump(spec, sort_keys=False))
+    print(
+        f"x) timeseries: {profiles.shape[1]} profile column(s), {sum(len(v) for v in spec['series'].values())} mapped series"
+    )
+    return len(profiles)
+
+
+def merge_yaml(out: str) -> None:
+    """Merge the per-topic YAML files into one case.yaml (comments are kept)."""
+    parts = [
+        ("settings", "config.yaml"),
+        ("assumptions", "assumptions.yaml"),
+        (
+            None,
+            "scenarios.yaml",
+        ),  # already has top-level keys 'scenarios' and 'stochastic'
+        ("timeseries", os.path.join("timeseries", "timeseries.yaml")),
+    ]
+    schema = os.path.relpath(SCHEMA_FILE, os.path.abspath(out)).replace(os.sep, "/")
+    lines = [
+        f"# yaml-language-server: $schema={schema}",
+        "# PyPSA-X case definition (replaces the Excel assumption book), see case.schema.json.",
+        "# Sections: settings | assumptions | scenarios | stochastic | timeseries",
+        "# Tables: technologies.csv, network/*.csv, timeseries/profiles.csv",
+        "",
+    ]
+    for section, fname in parts:
+        path = os.path.join(out, fname)
+        with open(path, encoding="utf-8") as f:
+            text = f.read().rstrip("\n").split("\n")
+        n_head = 0
+        while n_head < len(text) and (
+            text[n_head].startswith("#") or text[n_head] == ""
+        ):
+            n_head += 1
+        head = [line for line in text[:n_head] if line]
+        body = text[n_head:]
+        lines += ["# " + "-" * 93] + head
+        if section is None:
+            lines += body
+        else:
+            lines.append(f"{section}:")
+            lines += [("  " + line) if line else "" for line in body]
+        lines.append("")
+        os.remove(path)
+    with open(os.path.join(out, CASE_FILE), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    validate_case(out)  # parse + schema check
+    print(f"x) {CASE_FILE}: sections {', '.join(CASE_SECTIONS)}")
+
+
+def convert_xlsx_to_case(xlsx: str, case_dir: str, force: bool = False) -> None:
+    """
+    Convert an Excel assumption book (e.g. PyPSA_PtX_AB_default.xlsx) into a case folder
+    (case.yaml + CSV tables). The workbook must have been saved by Excel (cached formula
+    results are used). Values the case builder derives itself (technology lookups, units,
+    carriers, WACC, capital_cost, ...) are only written where they differ from the derived value.
+    """
+    import openpyxl
+
+    #
+    if os.path.exists(case_dir) and os.listdir(case_dir) and not force:
+        sys.exit(f"error! '{case_dir}' exists and is not empty (use --force)")
+    os.makedirs(case_dir, exist_ok=True)
+    #
+    print(f"convert '{xlsx}' -> '{case_dir}' ...")
+    wb = openpyxl.load_workbook(xlsx, data_only=True)
+    wb_f = openpyxl.load_workbook(xlsx, data_only=False)
+    #
+    a = convert_ab(wb, wb_f, case_dir)
+    statics, overrides = convert_network(xlsx, case_dir, a)
+    n_snapshots = convert_timeseries(xlsx, case_dir, a, statics)
+    links = statics.get("links", pd.DataFrame())
+    link_ports = sum(
+        1
+        for c in links.columns
+        if re.fullmatch(r"bus\d+", str(c)) and (links[c] != "").any()
+    )
+    convert_config(wb, case_dir, a, n_snapshots, link_ports)
+    convert_scenarios(wb, case_dir)
+    merge_yaml(case_dir)
+    #
+    print(
+        f"x) network: {len(overrides)} per-asset override(s) kept (Excel value != derived value):"
+    )
+    for o in overrides:
+        print(f"     {o}")
+    print("done.")
+
+
+def read_network_data(
+    source: str,
+    source_type: str = "case",
     target_folder: str = None,
     temp_file: str = None,
 ) -> None:
     """
-    Read the input Excel file (aka as Assumption Book) which contains all
-    the necessary PyPSA sheets to be exported (e.g., carriers, buses,
-    generators, generators-p_max_pu, links).
+    Build the PyPSA base network either from a case folder (YAML + CSV, see
+    see the CASE FOLDER INPUT section) or from an Excel file (aka as Assumption Book) which contains
+    all the necessary PyPSA sheets (e.g., carriers, buses, generators,
+    generators-p_max_pu, links). For a case folder, the resolved PyPSA tables are
+    written to '<target_folder>/<csv_subfolder>' and imported from there.
 
     Parameters
     ----------
-    excel_file : str
-        Name of the Excel file to be considered.
+    source : str
+        Case folder or Excel file to be considered.
+
+    source_type : str = "case"
+        Type of the source; either 'case' or 'excel'.
 
     target_folder: str = None
         Name of the folder to store all temporary and final files (e.g.,
         initial CSV files, base and result NC files).
 
     temp_file: str = None
-        Name of the temporary NC file after reading the CSV file and adjusting
-        options based on the scenario definition in the assumption book.
+        Name of the temporary NC file after reading the source.
 
     Returns
     -------
@@ -292,21 +1668,35 @@ def read_excel_data(
     if not os.path.exists(f"{target_folder}"):
         os.makedirs(f"{target_folder}")
     #
-    # collect the time of the xls file
-    excel_time = os.path.getmtime(excel_file)
+    # collect the (newest) modification time of the source file(s)
+    if source_type == "excel":
+        source_time = os.path.getmtime(source)
+    #
+    else:
+        source_time = case_mtime(source)
     #
     # check if the NC base case file is available, if yes collect its timestamp
     if os.path.isfile(f"{target_folder}/{temp_file}"):
         nc_time = os.path.getmtime(f"{target_folder}/{temp_file}")
     #
     else:
-        nc_time = excel_time
+        nc_time = source_time
     #
-    # if the base case NC file is younger as the Excel file, recreate it
-    if excel_time >= nc_time:
-        print(f"read energy system details from {excel_file} ...")
-        # create PyPSA network directly from Excel file
-        n = pypsa.Network(excel_file)
+    # if the base case NC file is older than the source, recreate it
+    if source_time >= nc_time:
+        print(f"read energy system details from {source} ...")
+        #
+        if source_type == "excel":
+            # create PyPSA network directly from Excel file
+            n = pypsa.Network(source)
+        #
+        else:
+            csv_folder = f"{target_folder}/{globals()['csv_subfolder']}"
+            built = build_tables(source)
+            write_pypsa_csv_folder(built, csv_folder)
+            # create PyPSA network from the resolved CSV folder
+            n = pypsa.Network(csv_folder)
+        #
         n.consistency_check()
         #
         if (eval(globals()["debug_mode"])) and (globals()["hours_to_optimize"] < 8760):
@@ -333,23 +1723,141 @@ def read_excel_data(
         save_network(n, f"{target_folder}", f"{temp_file}")
     #
     else:
-        print(f"no need to re-read energy system details from {excel_file}")
+        print(f"no need to re-read energy system details from {source}")
         print(f"NC file '{target_folder}/{temp_file}' is up-to-date\n")
     #
     return None
 
 
-def read_all_params(
+def _read_excel_params(
     excel_file: str,
+    run_scenarios_default: str,
 ) -> tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
     """
-    Read the optimization and scenario settings from the input Excel file
-    (aka as Assumption Book).
+    Read the optimization, scenario and stochastic settings from the sheets
+    'opt_params', 'scen_params' and 'stoch_params' of an Excel file (aka as
+    Assumption Book).
+    """
+    #
+    own_sheets = ["opt_params", "scen_params", "stoch_params"]
+    data = pd.read_excel(excel_file, sheet_name=own_sheets)
+    #
+    df_params = []
+    scen_params = []
+    stoch_params = []
+    #
+    scen_columns = [
+        "scenario",
+        "action",
+        "class",
+        "technology_name",
+        "column",
+        "value",
+        "active",
+    ]
+    #
+    for sheet_name, sheet_data in data.items():
+        df = copy.deepcopy(sheet_data[2:])
+        #
+        if sheet_name == "opt_params":
+            print("x) optimization parameters")
+            df.rename(
+                columns={
+                    df.columns[1]: "variable",
+                    df.columns[2]: "value",
+                    df.columns[3]: "remark",
+                },
+                inplace=True,
+            )
+            df.set_index("variable", inplace=True)
+            df.drop(labels=[df.columns[0]], axis=1, inplace=True)
+            df_params = df.copy()
+        #
+        elif sheet_name in ["scen_params", "stoch_params"]:
+            df.rename(
+                columns={df.columns[i + 1]: col for i, col in enumerate(scen_columns)},
+                inplace=True,
+            )
+            df.drop(df.columns[0], axis=1, inplace=True)
+            active = df[df.active == "True"]
+            #
+            if sheet_name == "scen_params":
+                print("x) scenario parameters")
+                run_scenarios = (
+                    df_params.loc["run_scenarios"].value
+                    if "run_scenarios" in df_params.index
+                    else run_scenarios_default
+                )
+                #
+                if str(run_scenarios) == "True":
+                    scen_params = active
+                #
+                else:
+                    scen_params = active[active.scenario == active.scenario.unique()[0]]
+            #
+            else:
+                print("x) stochastic optimization parameters")
+                stoch_params = active
+    #
+    return df_params, scen_params, stoch_params
+
+
+def _read_case_params(
+    case_dir: str,
+    run_scenarios_default: str,
+) -> tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
+    """
+    Read the optimization, scenario and stochastic settings from a case folder
+    (case.yaml: settings, assumptions, scenarios, stochastic).
+    """
+    #
+    built = build_tables(case_dir)
+    links = built["tables"].get("links", pd.DataFrame())
+    link_ports = sum(
+        1
+        for col in links.columns
+        if col.startswith("bus") and col[3:].isdigit() and (links[col] != "").any()
+    )
+    settings = read_config(
+        case_dir, built["assumptions"], len(built["snapshots"]), link_ports
+    )
+    #
+    print("x) optimization parameters")
+    df_params = pd.DataFrame({"value": pd.Series(settings, dtype=object)}).rename_axis(
+        "variable"
+    )
+    #
+    print("x) scenario parameters")
+    df_scen, df_stoch = read_scenarios(case_dir)
+    active = df_scen[df_scen.active == "True"]
+    if str(settings.get("run_scenarios", run_scenarios_default)) == "True":
+        scen_params = active
+    #
+    else:
+        scen_params = active[active.scenario == active.scenario.unique()[0]]
+    #
+    print("x) stochastic optimization parameters")
+    stoch_params = df_stoch[df_stoch.active == "True"]
+    #
+    return df_params, scen_params, stoch_params
+
+
+def read_all_params(
+    source: str,
+    source_type: str = "case",
+) -> tuple[pd.core.frame.DataFrame, pd.core.frame.DataFrame, pd.core.frame.DataFrame]:
+    """
+    Read the optimization and scenario settings either from a case folder
+    (case.yaml: settings, assumptions, scenarios, stochastic) or from an Excel
+    file (aka as Assumption Book; sheets opt_params, scen_params, stoch_params).
 
     Parameters
     ----------
-    excel_file : str
-        Name of the Excel file to be considered.
+    source : str
+        Case folder or Excel file to be considered.
+
+    source_type : str = "case"
+        Type of the source; either 'case' or 'excel'.
 
     Returns
     -------
@@ -363,8 +1871,6 @@ def read_all_params(
         Stochastic optimization details to be considered.
     """
     #
-    own_sheets = ["opt_params", "scen_params", "stoch_params"]
-    #
     # define some variables
     defaults = {
         # debug settings
@@ -372,7 +1878,7 @@ def read_all_params(
         "hours_to_optimize": (24 * 3),
         # Other settings
         "target_folder": f"./run_{uuid.uuid4().hex}",
-        "csv_subfolder": "csv_model",  # not necessary anymore, use Excel import instead
+        "csv_subfolder": "csv_model",  # resolved PyPSA CSV tables built from the case folder
         "temp_file": "base_model.nc",
         "result_file": "result",
         "use_oetc": "False",
@@ -442,75 +1948,16 @@ def read_all_params(
         "rm_load_name": "LOAD_EL_01",
     }
     #
-    print(f"\nread optimization and scenario settings from {excel_file} ...")
-    data = pd.read_excel(excel_file, sheet_name=own_sheets)
+    print(f"\nread optimization and scenario settings from {source} ...")
+    if source_type == "excel":
+        df_params, scen_params, stoch_params = _read_excel_params(
+            source, defaults["run_scenarios"]
+        )
     #
-    df_params = []
-    scen_params = []
-    stoch_params = []
-    #
-    for sheet_name, sheet_data in data.items():
-        df = copy.deepcopy(sheet_data[2:])
-        #
-        if sheet_name == "opt_params":
-            print("x) optimization parameters")
-            df.rename(
-                columns={
-                    df.columns[1]: "variable",
-                    df.columns[2]: "value",
-                    df.columns[3]: "remark",
-                },
-                inplace=True,
-            )
-            df.set_index("variable", inplace=True)
-            df.drop(labels=[df.columns[0]], axis=1, inplace=True)
-            df_params = df.copy()
-        #
-        elif sheet_name == "scen_params":
-            print("x) scenario parameters")
-            df.rename(
-                columns={
-                    df.columns[1]: "scenario",
-                    df.columns[2]: "action",
-                    df.columns[3]: "class",
-                    df.columns[4]: "technology_name",
-                    df.columns[5]: "column",
-                    df.columns[6]: "value",
-                    df.columns[7]: "active",
-                },
-                inplace=True,
-            )
-            df.drop(df.columns[0], axis=1, inplace=True)
-            #
-            if eval(df_params.loc["run_scenarios"].value):
-                scen_params = df[df.active == "True"]
-            #
-            else:
-                scen_params = df[
-                    (df.active == "True")
-                    & (df.scenario == df[df.active == "True"].scenario.unique()[0])
-                ]
-        #
-        elif sheet_name == "stoch_params":
-            print("x) stochastic optimization parameters")
-            df.rename(
-                columns={
-                    df.columns[1]: "scenario",
-                    df.columns[2]: "action",
-                    df.columns[3]: "class",
-                    df.columns[4]: "technology_name",
-                    df.columns[5]: "column",
-                    df.columns[6]: "value",
-                    df.columns[7]: "active",
-                },
-                inplace=True,
-            )
-            df.drop(df.columns[0], axis=1, inplace=True)
-            #
-            stoch_params = df[df.active == "True"]
-        #
-        else:
-            print(f"info! sheet {sheet_name} is not configured ...")
+    else:
+        df_params, scen_params, stoch_params = _read_case_params(
+            source, defaults["run_scenarios"]
+        )
     #
     print("done.\n")
     #
@@ -3800,7 +5247,6 @@ def check_oetc_usage(
         Dictionary of keyword arguments.
     """
     #
-    globals()["use_oetc"] = "False"
     if eval(globals()["use_oetc"]):
         try:
             print("info! try to initiate OETC ...")
@@ -3985,14 +5431,19 @@ def main() -> None:
     """
     #
     # read the optimization settings and scenario definitions
-    opt_params, df_scens, df_stochs = read_all_params(excel_filename)
+    opt_params, df_scens, df_stochs = read_all_params(input_source, input_type)
     # check the OETC usage and settings
     globals()["kwargs"] = {}
     # set solver options
     kwargs = check_oetc_usage(globals()["kwargs"])
     #
     # create and/or get the base network
-    read_excel_data(excel_filename, globals()["target_folder"], globals()["temp_file"])
+    read_network_data(
+        input_source,
+        input_type,
+        globals()["target_folder"],
+        globals()["temp_file"],
+    )
     #
     # validate if all scenario adjustments are in general ok
     all_adjustments_ok = validate_scenario_adjustments(
@@ -4058,5 +5509,6 @@ def main() -> None:
 # MAIN ------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    input_source, input_type = parse_arguments()
     # main()
     n, list_results, list_supplies, list_balances, list_curtailments, df = main()

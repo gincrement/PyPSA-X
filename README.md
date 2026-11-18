@@ -1,4 +1,4 @@
-part-load<!--
+<!--
 SPDX-FileCopyrightText: PyPSA-X Contributors
 SPDX-License-Identifier: MIT
 -->
@@ -98,16 +98,96 @@ pixi shell
 ```
 
 ## Usage
-``` py
-python pypsa-x.py AB_rev1.xls
+`pypsa-x.py` reads a case in one of two ways: from an Excel assumption book (`--xls`) or
+from a case folder of YAML and CSV files (`--folder`, the default). Both build the same PyPSA
+network; the two options cannot be combined.
+
+### Option 1: Excel assumption book
+``` bash
+python pypsa-x.py --xls PyPSA_PtX_AB_default.xlsx
 ```
 
-This executes the **PyPSA-X** script and reads the assumption book 'AB_rev1.xls' and follows
-the configuration within the worksheets <ins>opt_params</ins>, and <ins>scen_params</ins>.
+This executes the **PyPSA-X** script, reads the assumption book 'PyPSA_PtX_AB_default.xlsx'
+and follows the configuration within the worksheets
+<ins>opt_params</ins>, <ins>scen_params</ins>, and <ins>stoch_params</ins>.
 The sheet <ins>opt_params</ins> contains options to guide the PyPSA-X script (e.g., target folder
 to store the results; OETC settings).
 The sheet <ins>scen_params</ins> contains options of which variables to change between the
 optimization of different scenarios.
+
+### Option 2: case folder (YAML + CSV)
+``` bash
+python pypsa-x.py --folder cases/default
+```
+
+With `--folder`, `pypsa-x.py` reads a case folder instead of an Excel file (`cases/default` if
+neither `--folder` nor `--xls` is given). All inputs are plain text, so changes can be
+reviewed and compared with git.
+
+```
+cases/default/
+├── case.yaml              settings, assumptions, scenarios, stochastic cases, time series mapping
+├── technologies.csv       technology parameters (former AB sheet, technical block)
+├── network/               topology: carriers, buses, generators, links, stores, ... (one CSV each)
+└── timeseries/
+    └── profiles.csv       hourly raw profiles (former raw_data sheet)
+```
+
+#### Create a case from an existing assumption book
+``` bash
+python pypsa-x.py --xls-to-case PyPSA_PtX_AB_default.xlsx cases/my_project
+```
+The converter uses the values Excel calculated, so the workbook must have been saved in Excel.
+It prints every asset value it had to keep as an explicit override (see below). Use `--force`
+to overwrite an existing folder.
+
+#### case.yaml
+| Section       | Former sheet              | Content |
+|---------------|---------------------------|---------|
+| `settings`    | opt_params                | optimization settings (debug, solver, segmentation, constraints, MGA, ...) |
+| `assumptions` | AB (economic block)       | years, financing, project data, production target |
+| `scenarios`   | scen_params               | changes per scenario (`set`, `del`, `active`, `inactive`) |
+| `stochastic`  | stoch_params              | changes per stochastic case |
+| `timeseries`  | `generators-p_max_pu`, `loads-p_set`, ... | which profile feeds which PyPSA time series, optionally scaled |
+
+Values the assumption book calculated with formulas are derived automatically and are not part
+of the file: WACC, annuity factor, equity share, end year, construction period, hourly
+production target, solver time limit, investment period (`[y_cod]`), etc.
+
+Example scenario definition:
+``` yaml
+scenarios:
+  cheapPV:
+    set:
+      Python: {transmission_losses: 0}               # change a script setting
+      Generator:
+        PV_01: {capital_cost: 8446.58}               # change a component attribute
+  noBES02:
+    del:
+      StorageUnit: [BES_02]                          # remove a component
+  noMinPuIfInOp:
+    active: false                                    # keep the scenario, but do not run it
+    set:
+      Link:
+        FT_01: {_min_pu_if_in_op: 0}
+```
+
+#### technologies.csv and network/*.csv
+- `technologies.csv` lists one parameter per row: `component,parameter,value,unit,...`.
+  A `capital_cost` of `auto` is calculated as `invest_cost * annuity_factor + fom * invest_cost`.
+- Each `network/*.csv` row is one asset. Its `_component` column names the technology in
+  `technologies.csv`. **Empty cells are filled from `technologies.csv`** (and the carrier and unit
+  from the connected bus); **a filled cell overrides** that value for this asset only.
+
+#### Validation
+`case.yaml` is checked against [case.schema.json](case.schema.json) every time it is read.
+Typos in keys, invalid choices (e.g. `segmentation.function`), and out-of-range values stop the
+run with a list of all problems and their location in the file. Editors with YAML support (e.g.
+VS Code with the YAML extension) use the schema for autocompletion and inline checks, through the
+first line of `case.yaml`:
+``` yaml
+# yaml-language-server: $schema=../../case.schema.json
+```
 
 ## Dependencies
 **PyPSA-X** relies heavily on other open-source Python packages. The most important once are:

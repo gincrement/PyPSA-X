@@ -15,5 +15,7 @@ pypsa-ptx.py
 _ignore/*
 cache/*
 .idea
+cases/*
 run_*/*
 gurobi.lic
+__pycache__/
